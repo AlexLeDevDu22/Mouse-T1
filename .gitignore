@@ -1,0 +1,77 @@
+# Android related files
+.iml
+.gradle
+local.properties
+.ideacaches
+.idealibraries
+.ideamodules.xml
+.ideaworkspace.xml
+.ideanavEditor.xml
+.ideaassetWizardSettings.xml
+.DS_Store
+build
+.cxx
+.externalNativeBuild
+local.properties
+
+# Android specific files
+.apk
+.ap_
+.dex
+.class
+.so
+.jar
+.war
+.ear
+.keystore
+.jks
+
+# Log files
+.log
+
+# Android Studio generated files
+.idea
+.hprof
+captures
+output.json
+
+# Files for the gradle wrapper
+.gradle
+build
+
+# Generated files
+gen
+out
+bin
+
+# ArduinoESP32 related files
+.pio
+.vscode
+build
+lib
+
+# Ignoring compiled object files
+.o
+.d
+.a
+.lib
+.hex
+.elf
+.bin
+
+# Temporary files
+.tmp
+.temp
+.swp
+.swo
+.bak
+.sublime-project
+.sublime-workspace
+
+# Mac OS generated files
+.DS_Store
+
+# Windows generated files
+Thumbs.db
+ehthumbs.db
+Desktop.ini

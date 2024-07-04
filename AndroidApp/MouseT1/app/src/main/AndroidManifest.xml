@@ -1,0 +1,63 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    package="com.Alex.MouseT1">
+
+    <uses-permission android:name="android.permission.KILL_BACKGROUND_PROCESSES" />
+    <application
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:requestLegacyExternalStorage="true"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.MouseT1"
+        tools:targetApi="31"
+        android:usesCleartextTraffic="true">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:screenOrientation="portrait">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity android:name=".AutoTasks.CopilotAskingTask"
+            android:screenOrientation="portrait"/>
+        <activity android:name=".AutoTasks.OverviewLessonsTask"
+            android:screenOrientation="portrait"/>
+        <activity android:name=".AutoTasks.OneLessonsTask"
+            android:screenOrientation="portrait"/>
+        <activity android:name=".AutoTasks.OverviewChatGPTHistory"
+            android:screenOrientation="portrait"/>
+        <activity android:name=".AutoTasks.OneChatGPTHistory"
+            android:screenOrientation="portrait"/>
+
+
+        <activity android:name=".UI.LessonManagerUI"
+            android:screenOrientation="portrait"/>
+        <activity android:name=".UI.LessonTextActivity"
+            android:screenOrientation="portrait"/>
+    </application>
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"
+        tools:ignore="ManifestOrder" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32"
+        tools:ignore="ScopedStorage" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.USE_FINGERPRINT"/>
+    <uses-permission android:name="android.permission.DISABLE_KEYGUARD"/>
+    <uses-permission android:name="android.permission.INJECT_EVENTS"
+        tools:ignore="ProtectedPermissions" />
+
+</manifest>
