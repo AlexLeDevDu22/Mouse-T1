@@ -1,72 +1,72 @@
 # Android related files
-.iml
-.gradle
+*.iml
+.gradle/
 local.properties
-.ideacaches
-.idealibraries
-.ideamodules.xml
-.ideaworkspace.xml
-.ideanavEditor.xml
-.ideaassetWizardSettings.xml
+/.idea/caches/
+/.idea/libraries/
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
 .DS_Store
-build
-.cxx
-.externalNativeBuild
+/build/
+.cxx/
+.externalNativeBuild/
 local.properties
 
 # Android specific files
-.apk
-.ap_
-.dex
-.class
-.so
-.jar
-.war
-.ear
-.keystore
-.jks
+*.apk
+*.ap_
+*.dex
+*.class
+*.so
+*.jar
+*.war
+*.ear
+*.keystore
+*.jks
 
 # Log files
-.log
+*.log
 
 # Android Studio generated files
 .idea
-.hprof
-captures
+*.hprof
+captures/
 output.json
 
 # Files for the gradle wrapper
-.gradle
-build
+.gradle/
+**/build/
 
 # Generated files
-gen
-out
-bin
+gen/
+out/
+bin/
 
-# ArduinoESP32 related files
-.pio
-.vscode
-build
-lib
+# Arduino/ESP32 related files
+.pio/
+.vscode/
+build/
+lib/
 
 # Ignoring compiled object files
-.o
-.d
-.a
-.lib
-.hex
-.elf
-.bin
+*.o
+*.d
+*.a
+*.lib
+*.hex
+*.elf
+*.bin
 
 # Temporary files
-.tmp
-.temp
-.swp
-.swo
-.bak
-.sublime-project
-.sublime-workspace
+*.tmp
+*.temp
+*.swp
+*.swo
+*.bak
+*.sublime-project
+*.sublime-workspace
 
 # Mac OS generated files
 .DS_Store
