@@ -125,6 +125,7 @@ DynamicJsonDocument lastResponseDict(200);
 std::vector<String> chunks;
 int expectedChunks = -1;
 String pageName="menu";
+String lastPageName="menu";
 std::vector<String> OverviewMenuList={"{\"text\":\"chatGPT asking\",\"redirect\":\"askingType(chatGPT asking)\"}",
                                     "{\"text\":\"lessons\",\"redirect\":\"overview matiere\"}",
                                     "{\"text\":\"chatGPT history\",\"redirect\":\"askingType(chatGPT history)\"}"
@@ -163,6 +164,7 @@ int lastIndexFocused=0;
 int overviewXMoving=0;
 int streakLeftButtonTouched=0;
 int streakRightButtonTouched=0;
+int centerButtonStreak=0;
 bool veilleMode=false;
 
 void updateIndexFocused(void *pvParameters) {
@@ -363,9 +365,25 @@ void setup() {
     showPageText("Device not connected...");
   
   while (WiFi.status() != WL_CONNECTED) {
-      delay(500);
-      Serial.print(".");
-  }
+          delay(500);
+        Serial.print(".");
+        if (!(touchRead(button1) < 35 && touchRead(button2))){
+            centerButtonStreak=0;
+        }
+        while (touchRead(button1) < 35 && touchRead(button2) < 35){
+            centerButtonStreak+=1;
+            if (centerButtonStreak>=250000){
+                veilleMode=!veilleMode;
+                centerButtonStreak=0;
+                break;
+            }
+        }
+        if (veilleMode){
+            u8g2.clearBuffer();
+        }else{
+            showPageText("Device not connected...");
+        }
+    }
   u8g2.clearBuffer();
   Serial.println("");
   Serial.println("WiFi connected");
@@ -533,6 +551,10 @@ void showPageOverview(std::vector<String>& OverviewDatasList) {
         viewFocused = -indexFocused+2;
     }
 
+    if (lastViewFocused==-1){
+        lastViewFocused=viewFocused;
+    }
+
 
     int x;
     if (viewFocused==lastViewFocused){
@@ -545,7 +567,7 @@ void showPageOverview(std::vector<String>& OverviewDatasList) {
             itoa(i+1, oneInt, 10);
             x = strlen(oneInt)*8.5+4;
             if (indexFocused==i){
-                u8g2.drawBox(x, y+1 , 128-x, lineHeight-1);
+                u8g2.drawBox(x, y+1 , u8g2.getStrWidth(bloc["text"])+1, lineHeight-1);
                 u8g2.setDrawColor(0);
                 if (u8g2.getStrWidth(bloc["text"])>128-x){
                     if (overviewXMoving>=u8g2.getStrWidth(bloc["text"])+40){
@@ -553,11 +575,11 @@ void showPageOverview(std::vector<String>& OverviewDatasList) {
                     }else{
                         overviewXMoving++;
                     }
-                    u8g2.drawStr(x-overviewXMoving+u8g2.getStrWidth(bloc["text"])+40,lineHeight + y -2, bloc["text"]);
+                    u8g2.drawStr(x+1-overviewXMoving+u8g2.getStrWidth(bloc["text"])+40,lineHeight + y - 2, bloc["text"]);
                 }
-                u8g2.drawStr(x-overviewXMoving,lineHeight + y -2, bloc["text"]); 
+                u8g2.drawStr(x+1-overviewXMoving,lineHeight + y - 2, bloc["text"]); 
             }else{
-                u8g2.drawStr(x,y+lineHeight, bloc["text"]);            
+                u8g2.drawStr(x+1,y+lineHeight - 2, bloc["text"]);            
             }
             u8g2.setDrawColor(0);    
             u8g2.drawBox(0, y , u8g2.getStrWidth(oneInt)+4, lineHeight+1);
@@ -585,13 +607,13 @@ void showPageOverview(std::vector<String>& OverviewDatasList) {
             
                 DynamicJsonDocument bloc(200);
                 deserializeJson(bloc, OverviewDatasList[i]);
-                u8g2.drawStr(0,lineHeight + y -2, oneInt);
+                u8g2.drawStr(0,lineHeight + y, oneInt);
                 int x = strlen(oneInt)*8.5+4;
                 if (indexFocused==i){
-                    u8g2.drawBox(x, y , 128-x, lineHeight);
+                    u8g2.drawBox(x, y , u8g2.getStrWidth(bloc["text"])+1, lineHeight);
                     u8g2.setDrawColor(0);
                 }
-                u8g2.drawStr(x,lineHeight + y -2, bloc["text"]);
+                u8g2.drawStr(x+1,lineHeight + y - 2, bloc["text"]);
                 u8g2.setDrawColor(1); 
 
                 if (i==OverviewDatasList.size()-1 && OverviewDatasList.size()>3){
@@ -604,15 +626,17 @@ void showPageOverview(std::vector<String>& OverviewDatasList) {
         }
     }
     lastViewFocused=viewFocused;
-    lastIndexFocused=indexFocused;
-
 }
 
-int centerButtonStreak=0;
-int leftButtonStreak=0;
 void loop() {
     if (!veilleMode){
         if (WiFi.status() == WL_CONNECTED){
+            if(pageName!=lastPageName){
+                IndexFocused=0;
+                overviewXMoving=0;
+                lastViewFocused=-1;
+                lastPageName=pageName;
+            }
             if (pageName==""){
                 pageName="menu";
             }
@@ -629,7 +653,7 @@ void loop() {
                     OverviewDatasList.insert(OverviewDatasList.begin(),"{\"text\":\"back to menu\"}");
 
                     pageName = "overview";
-                    IndexFocused = 0;
+                    
                 }
                 lastResponseDid = lastResponseString;
 
@@ -642,7 +666,7 @@ void loop() {
                     DynamicJsonDocument page(200);
                     deserializeJson(page, OverviewMenuList[IndexFocused]);
                     pageName=page["redirect"].as<const char*>();
-                    IndexFocused = 0;
+                    
                 }
 
             }else if (pageName=="askingType(chatGPT asking)"){
@@ -672,10 +696,10 @@ void loop() {
                     jsonRequest["asking type"] = askingTypeSelected;
 
                     pageName = "simple text view";
-                    IndexFocused = 0;
+                    
                     simpleTextViewText="sending request to android, waiting response...";
                 }else if(touchRead(button1) < 35){
-                    IndexFocused = 0;
+                    
                     pageName="menu";
 
                 }
@@ -692,7 +716,7 @@ void loop() {
                         jsonRequest["type"] = "overview lessons"; // request info
 
                         pageName = "simple text view";
-                        IndexFocused = 0;
+                        
                         simpleTextViewText="sending request to android, waiting response...";
                     }else{
                         pageName="menu";
@@ -721,7 +745,7 @@ void loop() {
                 showPageText(simpleTextViewText);
                 if (touchRead(button1)< 35 && touchRead(button2) < 35) {
                     pageName = "menu";
-                    IndexFocused = 0;
+                    
                 }
             } if (pageName == "overview") {
                 showPageOverview(OverviewDatasList);
