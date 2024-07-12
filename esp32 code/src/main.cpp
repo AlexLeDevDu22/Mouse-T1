@@ -18,6 +18,7 @@
 #include <String.h>
 #include <sstream>
 #include <driver/adc.h>
+#include "functionDefined.h"
 
 // Commands
 #define button1 14
