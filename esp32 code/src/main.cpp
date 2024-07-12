@@ -123,12 +123,15 @@ String lastResponseDid = "";
 DynamicJsonDocument lastResponseDict(200);
 #include <vector>
 std::vector<String> chunks;
+bool needWifi = false;
 int expectedChunks = -1;
 String pageName="menu";
 String lastPageName="menu";
+String gameChoiced="";
 std::vector<String> OverviewMenuList={"{\"text\":\"chatGPT asking\",\"redirect\":\"askingType(chatGPT asking)\"}",
                                     "{\"text\":\"lessons\",\"redirect\":\"overview matiere\"}",
-                                    "{\"text\":\"chatGPT history\",\"redirect\":\"askingType(chatGPT history)\"}"
+                                    "{\"text\":\"chatGPT history\",\"redirect\":\"askingType(chatGPT history)\"}",
+                                    "{\"text\":\"Games\",\"redirect\":\"Games overview\"}"
                                     };
 std::vector<String> overviewMatieresList={"{\"text\":\"back to menu\"}",
                                         "{\"text\":\"Français\"}",
@@ -155,6 +158,11 @@ std::vector<String> overviewAskingTypeList={"{\"text\":\"back to menu\"}",
                                             "{\"text\":\"Trouver la date\"}",
                                             "{\"text\":\"Description d'image\"}",
                                             };
+
+                                            
+std::vector<String> OverviewGamesList={ "{\"text\":\"back to menu\"}",
+                                        "{\"text\":\"Morpion\"}"
+                                        };
 String simpleTextViewText="";
 std::vector<String> OverviewDatasList;
 String askingTypeSelected;
@@ -263,8 +271,16 @@ static esp_err_t json_post_handler(httpd_req_t *req) {
     httpd_resp_send(req, "Chunk received", HTTPD_RESP_USE_STRLEN);
     return ESP_OK;
 }
+bool lastWifiStatus=false;
+void startServer(void *pvParameters) {
+    while (!WL_CONNECTED){}
 
-void startServer() {
+    Serial.println("");
+    Serial.println("WiFi connected");
+
+    Serial.print("Go to: http://");
+    Serial.println(WiFi.localIP().toString());
+
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
 
     // Augmenter la taille maximale des tampons de réception
@@ -303,6 +319,7 @@ void startServer() {
         Serial.println("Failed to start server");
     }
 }
+
 void showPageText(String text);
 
 void setup() {
@@ -362,41 +379,10 @@ void setup() {
 
   WiFi.begin(ssid, password);
 
-    showPageText("Device not connected...");
-  
-  while (WiFi.status() != WL_CONNECTED) {
-          delay(500);
-        Serial.print(".");
-        if (!(touchRead(button1) < 35 && touchRead(button2))){
-            centerButtonStreak=0;
-        }
-        while (touchRead(button1) < 35 && touchRead(button2) < 35){
-            centerButtonStreak+=1;
-            if (centerButtonStreak>=250000){
-                veilleMode=!veilleMode;
-                centerButtonStreak=0;
-                break;
-            }
-        }
-        if (veilleMode){
-            u8g2.clearBuffer();
-        }else{
-            showPageText("Device not connected...");
-        }
-    }
-  u8g2.clearBuffer();
-  Serial.println("");
-  Serial.println("WiFi connected");
-
-  // Init and get the time
   configTime(0, 0, "pool.ntp.org");
 
-  Serial.print("Go to: http://");
-  Serial.println(WiFi.localIP().toString());
-
-  startServer();
-
   // Crée une tâche pour mettre à jour l'heure locale en arrière-plan
+  xTaskCreate(startServer, "startServer", 2048, NULL, 1, NULL);
   xTaskCreate(updateLocalTime, "updateLocalTime", 2048, NULL, 1, NULL);
   xTaskCreate(updateIndexFocused, "updateIndexFocused", 2048, NULL, 1, NULL);
 
@@ -495,7 +481,7 @@ void showPageText(String text) {
     int lineHeight = u8g2.getMaxCharHeight();
     if (indexFocused>lines.size()-3){
         indexFocused=lines.size()-3;
-        if (indexFocused<0){
+        if (indexFocused<0 || (indexFocused>0 && lines.size()<4)){
             indexFocused=0;
         }
         IndexFocused=indexFocused;
@@ -555,6 +541,9 @@ void showPageOverview(std::vector<String>& OverviewDatasList) {
         lastViewFocused=viewFocused;
     }
 
+    if (indexFocused>0 && OverviewDatasList.size()<4){
+        viewFocused=0;
+    }
 
     int x;
     if (viewFocused==lastViewFocused){
@@ -630,7 +619,7 @@ void showPageOverview(std::vector<String>& OverviewDatasList) {
 
 void loop() {
     if (!veilleMode){
-        if (WiFi.status() == WL_CONNECTED){
+        if (WiFi.status() == WL_CONNECTED && needWifi || !needWifi){
             if(pageName!=lastPageName){
                 IndexFocused=0;
                 overviewXMoving=0;
@@ -666,7 +655,6 @@ void loop() {
                     DynamicJsonDocument page(200);
                     deserializeJson(page, OverviewMenuList[IndexFocused]);
                     pageName=page["redirect"].as<const char*>();
-                    
                 }
 
             }else if (pageName=="askingType(chatGPT asking)"){
@@ -698,6 +686,8 @@ void loop() {
                     pageName = "simple text view";
                     
                     simpleTextViewText="sending request to android, waiting response...";
+
+                    needWifi=true;
                 }else if(touchRead(button1) < 35){
                     
                     pageName="menu";
@@ -718,6 +708,8 @@ void loop() {
                         pageName = "simple text view";
                         
                         simpleTextViewText="sending request to android, waiting response...";
+
+                        needWifi=true;
                     }else{
                         pageName="menu";
                     }
@@ -737,10 +729,28 @@ void loop() {
                         pageName = "simple text view";
                         IndexFocused=0;
                         simpleTextViewText="sending request to android, waiting response...";
+
+                        needWifi=true;
                     }else{
                         pageName="menu";
                     }
                 }
+            }else if (pageName=="Games overview"){
+                showPageOverview(OverviewGamesList);
+                if (touchRead(button1)< 35 && touchRead(button2) < 35) {
+                    if (IndexFocused!=0){
+                        pageName = "In Game";
+                        DynamicJsonDocument games(200);
+                        deserializeJson(games, OverviewGamesList[IndexFocused]);
+                        gameChoiced=games["text"].as<const char*>();
+                    }else{
+                        pageName="menu";
+                    }
+                }
+            }else if (pageName=="In Game"){
+                //TODO launch the game
+                //launchGame(gameChoiced)
+
             }else if (pageName == "simple text view") {
                 showPageText(simpleTextViewText);
                 if (touchRead(button1)< 35 && touchRead(button2) < 35) {
@@ -771,6 +781,8 @@ void loop() {
                             simpleTextViewText="sending request to android, waiting response...";
                             pageName = "simple text view";
                         }
+
+                        needWifi=true;
                     }else{
                         pageName = "menu";
                     }
@@ -779,6 +791,10 @@ void loop() {
         }else{
             u8g2.clearBuffer();
             showPageText("Device not connected...");
+            if (touchRead(button1)< 35 && touchRead(button1)< 35){
+                pageName = "menu";
+                needWifi=false;
+            }
             u8g2.sendBuffer();
         }
     }else{
