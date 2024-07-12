@@ -271,9 +271,11 @@ static esp_err_t json_post_handler(httpd_req_t *req) {
     httpd_resp_send(req, "Chunk received", HTTPD_RESP_USE_STRLEN);
     return ESP_OK;
 }
-bool lastWifiStatus=false;
+
 void startServer(void *pvParameters) {
-    while (!WL_CONNECTED){}
+    while (WiFi.status() != WL_CONNECTED){
+        delay(100);
+    }
 
     Serial.println("");
     Serial.println("WiFi connected");
@@ -318,6 +320,7 @@ void startServer(void *pvParameters) {
     } else {
         Serial.println("Failed to start server");
     }
+    while (true) {delay(100);}
 }
 
 void showPageText(String text);
@@ -473,7 +476,6 @@ std::vector<String> splitText(const char* text, int maxWidth) {
 
 // Graphic interface
 void showPageText(String text) {
-    u8g2.clearBuffer();
 
     int indexFocused=IndexFocused;
 
@@ -481,12 +483,16 @@ void showPageText(String text) {
     int lineHeight = u8g2.getMaxCharHeight();
     if (indexFocused>lines.size()-3){
         indexFocused=lines.size()-3;
-        if (indexFocused<0 || (indexFocused>0 && lines.size()<4)){
+        if (indexFocused<0){
             indexFocused=0;
         }
-        IndexFocused=indexFocused;
     }
+    if (indexFocused>0 && lines.size()<4){
+        indexFocused=0;
+    }
+    IndexFocused=indexFocused;
 
+    u8g2.clearBuffer();
     if (indexFocused==lastIndexFocused){
         for (int i = 0; i < lines.size(); i++) {
             int y =  -indexFocused*lineHeight + i * lineHeight;
