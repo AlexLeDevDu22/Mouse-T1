@@ -18,6 +18,7 @@
 #include <String.h>
 #include <sstream>
 #include <driver/adc.h>
+#include "functionDefined.h"
 
 // Commands
 #define button1 14
@@ -123,11 +124,15 @@ String lastResponseDid = "";
 DynamicJsonDocument lastResponseDict(200);
 #include <vector>
 std::vector<String> chunks;
+bool needWifi = false;
 int expectedChunks = -1;
 String pageName="menu";
+String lastPageName="menu";
+String gameChoiced="";
 std::vector<String> OverviewMenuList={"{\"text\":\"chatGPT asking\",\"redirect\":\"askingType(chatGPT asking)\"}",
                                     "{\"text\":\"lessons\",\"redirect\":\"overview matiere\"}",
-                                    "{\"text\":\"chatGPT history\",\"redirect\":\"askingType(chatGPT history)\"}"
+                                    "{\"text\":\"chatGPT history\",\"redirect\":\"askingType(chatGPT history)\"}",
+                                    "{\"text\":\"Games\",\"redirect\":\"Games overview\"}"
                                     };
 std::vector<String> overviewMatieresList={"{\"text\":\"back to menu\"}",
                                         "{\"text\":\"Français\"}",
@@ -154,6 +159,11 @@ std::vector<String> overviewAskingTypeList={"{\"text\":\"back to menu\"}",
                                             "{\"text\":\"Trouver la date\"}",
                                             "{\"text\":\"Description d'image\"}",
                                             };
+
+                                            
+std::vector<String> OverviewGamesList={ "{\"text\":\"back to menu\"}",
+                                        "{\"text\":\"Morpion\"}"
+                                        };
 String simpleTextViewText="";
 std::vector<String> OverviewDatasList;
 String askingTypeSelected;
@@ -163,6 +173,7 @@ int lastIndexFocused=0;
 int overviewXMoving=0;
 int streakLeftButtonTouched=0;
 int streakRightButtonTouched=0;
+int centerButtonStreak=0;
 bool veilleMode=false;
 
 void updateIndexFocused(void *pvParameters) {
@@ -199,6 +210,20 @@ void updateIndexFocused(void *pvParameters) {
             streakLeftButtonTouched=0;
             streakRightButtonTouched=0;
             delay(2);
+        }
+    }
+}
+
+
+void veilleModeManager(void *pvParameters){
+    while (true){
+        while (touchRead(button1) < 35 && touchRead(button2) < 35){
+            centerButtonStreak+=1;
+            if (centerButtonStreak>=250000){
+                veilleMode=!veilleMode;
+                centerButtonStreak=0;
+                break;
+            }
         }
     }
 }
@@ -262,7 +287,17 @@ static esp_err_t json_post_handler(httpd_req_t *req) {
     return ESP_OK;
 }
 
-void startServer() {
+void startServer(void *pvParameters) {
+    while (WiFi.status() != WL_CONNECTED){
+        delay(100);
+    }
+
+    Serial.println("");
+    Serial.println("WiFi connected");
+
+    Serial.print("Go to: http://");
+    Serial.println(WiFi.localIP().toString());
+
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
 
     // Augmenter la taille maximale des tampons de réception
@@ -300,7 +335,9 @@ void startServer() {
     } else {
         Serial.println("Failed to start server");
     }
+    while (true) {delay(100);}
 }
+
 void showPageText(String text);
 
 void setup() {
@@ -360,27 +397,13 @@ void setup() {
 
   WiFi.begin(ssid, password);
 
-    showPageText("Device not connected...");
-  
-  while (WiFi.status() != WL_CONNECTED) {
-      delay(500);
-      Serial.print(".");
-  }
-  u8g2.clearBuffer();
-  Serial.println("");
-  Serial.println("WiFi connected");
-
-  // Init and get the time
   configTime(0, 0, "pool.ntp.org");
 
-  Serial.print("Go to: http://");
-  Serial.println(WiFi.localIP().toString());
-
-  startServer();
-
   // Crée une tâche pour mettre à jour l'heure locale en arrière-plan
+  xTaskCreate(startServer, "startServer", 2048, NULL, 1, NULL);
   xTaskCreate(updateLocalTime, "updateLocalTime", 2048, NULL, 1, NULL);
   xTaskCreate(updateIndexFocused, "updateIndexFocused", 2048, NULL, 1, NULL);
+  xTaskCreate(veilleModeManager, "veilleModeManager", 2048, NULL, 1, NULL);
 
   randomSeed(millis());
 }
@@ -469,7 +492,6 @@ std::vector<String> splitText(const char* text, int maxWidth) {
 
 // Graphic interface
 void showPageText(String text) {
-    u8g2.clearBuffer();
 
     int indexFocused=IndexFocused;
 
@@ -480,9 +502,13 @@ void showPageText(String text) {
         if (indexFocused<0){
             indexFocused=0;
         }
-        IndexFocused=indexFocused;
     }
+    if (indexFocused>0 && lines.size()<4){
+        indexFocused=0;
+    }
+    IndexFocused=indexFocused;
 
+    u8g2.clearBuffer();
     if (indexFocused==lastIndexFocused){
         for (int i = 0; i < lines.size(); i++) {
             int y =  -indexFocused*lineHeight + i * lineHeight;
@@ -533,6 +559,13 @@ void showPageOverview(std::vector<String>& OverviewDatasList) {
         viewFocused = -indexFocused+2;
     }
 
+    if (lastViewFocused==-1){
+        lastViewFocused=viewFocused;
+    }
+
+    if (indexFocused>0 && OverviewDatasList.size()<4){
+        viewFocused=0;
+    }
 
     int x;
     if (viewFocused==lastViewFocused){
@@ -545,7 +578,7 @@ void showPageOverview(std::vector<String>& OverviewDatasList) {
             itoa(i+1, oneInt, 10);
             x = strlen(oneInt)*8.5+4;
             if (indexFocused==i){
-                u8g2.drawBox(x, y+1 , 128-x, lineHeight-1);
+                u8g2.drawBox(x, y+1 , u8g2.getStrWidth(bloc["text"])+1, lineHeight-1);
                 u8g2.setDrawColor(0);
                 if (u8g2.getStrWidth(bloc["text"])>128-x){
                     if (overviewXMoving>=u8g2.getStrWidth(bloc["text"])+40){
@@ -553,11 +586,11 @@ void showPageOverview(std::vector<String>& OverviewDatasList) {
                     }else{
                         overviewXMoving++;
                     }
-                    u8g2.drawStr(x-overviewXMoving+u8g2.getStrWidth(bloc["text"])+40,lineHeight + y -2, bloc["text"]);
+                    u8g2.drawStr(x+1-overviewXMoving+u8g2.getStrWidth(bloc["text"])+40,lineHeight + y - 2, bloc["text"]);
                 }
-                u8g2.drawStr(x-overviewXMoving,lineHeight + y -2, bloc["text"]); 
+                u8g2.drawStr(x+1-overviewXMoving,lineHeight + y - 2, bloc["text"]); 
             }else{
-                u8g2.drawStr(x,y+lineHeight, bloc["text"]);            
+                u8g2.drawStr(x+1,y+lineHeight - 2, bloc["text"]);            
             }
             u8g2.setDrawColor(0);    
             u8g2.drawBox(0, y , u8g2.getStrWidth(oneInt)+4, lineHeight+1);
@@ -585,13 +618,13 @@ void showPageOverview(std::vector<String>& OverviewDatasList) {
             
                 DynamicJsonDocument bloc(200);
                 deserializeJson(bloc, OverviewDatasList[i]);
-                u8g2.drawStr(0,lineHeight + y -2, oneInt);
+                u8g2.drawStr(0,lineHeight + y, oneInt);
                 int x = strlen(oneInt)*8.5+4;
                 if (indexFocused==i){
-                    u8g2.drawBox(x, y , 128-x, lineHeight);
+                    u8g2.drawBox(x, y , u8g2.getStrWidth(bloc["text"])+1, lineHeight);
                     u8g2.setDrawColor(0);
                 }
-                u8g2.drawStr(x,lineHeight + y -2, bloc["text"]);
+                u8g2.drawStr(x+1,lineHeight + y - 2, bloc["text"]);
                 u8g2.setDrawColor(1); 
 
                 if (i==OverviewDatasList.size()-1 && OverviewDatasList.size()>3){
@@ -604,15 +637,17 @@ void showPageOverview(std::vector<String>& OverviewDatasList) {
         }
     }
     lastViewFocused=viewFocused;
-    lastIndexFocused=indexFocused;
-
 }
 
-int centerButtonStreak=0;
-int leftButtonStreak=0;
 void loop() {
     if (!veilleMode){
-        if (WiFi.status() == WL_CONNECTED){
+        if (WiFi.status() == WL_CONNECTED && needWifi || !needWifi){
+            if(pageName!=lastPageName){
+                IndexFocused=0;
+                overviewXMoving=0;
+                lastViewFocused=-1;
+                lastPageName=pageName;
+            }
             if (pageName==""){
                 pageName="menu";
             }
@@ -629,7 +664,7 @@ void loop() {
                     OverviewDatasList.insert(OverviewDatasList.begin(),"{\"text\":\"back to menu\"}");
 
                     pageName = "overview";
-                    IndexFocused = 0;
+                    
                 }
                 lastResponseDid = lastResponseString;
 
@@ -642,7 +677,6 @@ void loop() {
                     DynamicJsonDocument page(200);
                     deserializeJson(page, OverviewMenuList[IndexFocused]);
                     pageName=page["redirect"].as<const char*>();
-                    IndexFocused = 0;
                 }
 
             }else if (pageName=="askingType(chatGPT asking)"){
@@ -672,10 +706,12 @@ void loop() {
                     jsonRequest["asking type"] = askingTypeSelected;
 
                     pageName = "simple text view";
-                    IndexFocused = 0;
+                    
                     simpleTextViewText="sending request to android, waiting response...";
+
+                    needWifi=true;
                 }else if(touchRead(button1) < 35){
-                    IndexFocused = 0;
+                    
                     pageName="menu";
 
                 }
@@ -692,8 +728,10 @@ void loop() {
                         jsonRequest["type"] = "overview lessons"; // request info
 
                         pageName = "simple text view";
-                        IndexFocused = 0;
+                        
                         simpleTextViewText="sending request to android, waiting response...";
+
+                        needWifi=true;
                     }else{
                         pageName="menu";
                     }
@@ -713,15 +751,33 @@ void loop() {
                         pageName = "simple text view";
                         IndexFocused=0;
                         simpleTextViewText="sending request to android, waiting response...";
+
+                        needWifi=true;
                     }else{
                         pageName="menu";
                     }
                 }
+            }else if (pageName=="Games overview"){
+                showPageOverview(OverviewGamesList);
+                if (touchRead(button1)< 35 && touchRead(button2) < 35) {
+                    if (IndexFocused!=0){
+                        pageName = "In Game";
+                        DynamicJsonDocument games(200);
+                        deserializeJson(games, OverviewGamesList[IndexFocused]);
+                        gameChoiced=games["text"].as<const char*>();
+                    }else{
+                        pageName="menu";
+                    }
+                }
+            }else if (pageName=="In Game"){
+                //TODO launch the game
+                //launchGame(gameChoiced)
+
             }else if (pageName == "simple text view") {
                 showPageText(simpleTextViewText);
                 if (touchRead(button1)< 35 && touchRead(button2) < 35) {
                     pageName = "menu";
-                    IndexFocused = 0;
+                    
                 }
             } if (pageName == "overview") {
                 showPageOverview(OverviewDatasList);
@@ -747,6 +803,8 @@ void loop() {
                             simpleTextViewText="sending request to android, waiting response...";
                             pageName = "simple text view";
                         }
+
+                        needWifi=true;
                     }else{
                         pageName = "menu";
                     }
@@ -755,6 +813,10 @@ void loop() {
         }else{
             u8g2.clearBuffer();
             showPageText("Device not connected...");
+            if (touchRead(button1)< 35 && touchRead(button1)< 35){
+                pageName = "menu";
+                needWifi=false;
+            }
             u8g2.sendBuffer();
         }
     }else{
@@ -766,13 +828,5 @@ void loop() {
 
     if (!(touchRead(button1) < 35 && touchRead(button2))){
         centerButtonStreak=0;
-    }
-    while (touchRead(button1) < 35 && touchRead(button2) < 35){
-        centerButtonStreak+=1;
-        if (centerButtonStreak>=250000){
-            veilleMode=!veilleMode;
-            centerButtonStreak=0;
-            break;
-        }
     }
 }
