@@ -18,7 +18,7 @@
 #include <String.h>
 #include <sstream>
 #include <driver/adc.h>
-#include "functionDefined.h"
+#include <cmath>
 
 // Commands
 #define button1 14
@@ -26,7 +26,7 @@
 #define SDA_PIN 13
 #define SCL_PIN 15
 
-U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE, SCL_PIN, SDA_PIN);
+U8G2_SH1106_128X32_VISIONOX_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE, SCL_PIN, SDA_PIN);
 
 const char* ssid = "Galaxy A20e de Alex";
 const char* password = "Alexdu22";
@@ -162,7 +162,8 @@ std::vector<String> overviewAskingTypeList={"{\"text\":\"back to menu\"}",
 
                                             
 std::vector<String> OverviewGamesList={ "{\"text\":\"back to menu\"}",
-                                        "{\"text\":\"Morpion\"}"
+                                        "{\"text\":\"Morpion\"}",
+                                        "{\"text\":\"Pong\"}",
                                         };
 String simpleTextViewText="";
 std::vector<String> OverviewDatasList;
@@ -175,6 +176,9 @@ int streakLeftButtonTouched=0;
 int streakRightButtonTouched=0;
 int centerButtonStreak=0;
 bool veilleMode=false;
+
+void morpionGame();
+void pongGame();
 
 void updateIndexFocused(void *pvParameters) {
     while(true){
@@ -210,6 +214,20 @@ void updateIndexFocused(void *pvParameters) {
             streakLeftButtonTouched=0;
             streakRightButtonTouched=0;
             delay(2);
+        }
+    }
+}
+
+
+void veilleModeManager(void *pvParameters){
+    while (true){
+        while (touchRead(button1) < 35 && touchRead(button2) < 35){
+            centerButtonStreak+=1;
+            if (centerButtonStreak>=250000){
+                veilleMode=!veilleMode;
+                centerButtonStreak=0;
+                break;
+            }
         }
     }
 }
@@ -389,6 +407,7 @@ void setup() {
   xTaskCreate(startServer, "startServer", 2048, NULL, 1, NULL);
   xTaskCreate(updateLocalTime, "updateLocalTime", 2048, NULL, 1, NULL);
   xTaskCreate(updateIndexFocused, "updateIndexFocused", 2048, NULL, 1, NULL);
+  xTaskCreate(veilleModeManager, "veilleModeManager", 2048, NULL, 1, NULL);
 
   randomSeed(millis());
 }
@@ -755,8 +774,12 @@ void loop() {
                     }
                 }
             }else if (pageName=="In Game"){
-                //TODO launch the game
-                //launchGame(gameChoiced)
+                if (gameChoiced=="Morpion"){
+                    morpionGame();
+                }else if (gameChoiced=="Pong") {
+                    pongGame();
+                }
+                pageName="Games overview";
 
             }else if (pageName == "simple text view") {
                 showPageText(simpleTextViewText);
@@ -814,12 +837,288 @@ void loop() {
     if (!(touchRead(button1) < 35 && touchRead(button2))){
         centerButtonStreak=0;
     }
-    while (touchRead(button1) < 35 && touchRead(button2) < 35){
-        centerButtonStreak+=1;
-        if (centerButtonStreak>=250000){
-            veilleMode=!veilleMode;
-            centerButtonStreak=0;
-            break;
+
+    while (touchRead(button1) < 35 || touchRead(button2) < 35 && lastPageName!=pageName){}
+}
+
+
+
+
+
+
+
+
+
+
+
+void drawTable(int xOffset, std::vector<String> tableValues){
+    u8g2.clearBuffer();
+
+    for (int collumnBorder = 0; collumnBorder<4; collumnBorder++){
+        u8g2.drawBox(xOffset+collumnBorder*10, 0, 1, 62);
+    }
+
+    for (int rowBorder = 0; rowBorder<4; rowBorder++){
+        
+        u8g2.drawBox(xOffset, rowBorder * 10 , 32, 1);
+        
+    }
+
+    for (int x = 0; x<3; x++){
+        for (int y = 0; y<3; y++){
+
+        if (IndexFocused == x+y*3){
+            u8g2.drawBox(xOffset + x*10, y*10,10,10);
+            u8g2.setDrawColor(0);
+        }
+
+        if (tableValues[x+y*3].c_str()!=" "){
+            const char* strToShow=tableValues[x+y*3].c_str();
+            
+            u8g2.drawStr(xOffset + x*10, y*10+9,strToShow);
+        }
+        
+        u8g2.setDrawColor(1);
         }
     }
+    u8g2.sendBuffer();
+
+
+}
+
+// Vérifie si une ligne ou colonne ou diagonale contient une séquence continue de symboles du joueur
+bool checkLine(const std::vector<String>& board, int startX, int startY, int dx, int dy, const String& player, int length, int& startXOut, int& startYOut, int& endXOut, int& endYOut) {
+    int count = 0;
+    int x = startX, y = startY;
+    for (int i = 0; i < length; ++i) {
+        if (x < 0 || x >= 3 || y < 0 || y >= 3 || board[y * 3 + x] != player) {
+            return false;
+        }
+        if (count == 0) {
+            startXOut = x;
+            startYOut = y;
+        }
+        endXOut = x;
+        endYOut = y;
+        count++;
+        x += dx;
+        y += dy;
+    }
+    return count == length;
+}
+
+// Convertit un index du plateau en coordonnées x, y
+void indexToCoordinates(int index, int& x, int& y) {
+    x = index % 3;
+    y = index / 3;
+}
+
+// Vérifie s'il y a une victoire en regardant uniquement les lignes qui contiennent le dernier coup
+bool checkForWin(const std::vector<String>& board, int lastMoveIndex, int& startXOut, int& startYOut, int& endXOut, int& endYOut) {
+    int lastMoveX, lastMoveY;
+    indexToCoordinates(lastMoveIndex, lastMoveX, lastMoveY);
+    String player = board[lastMoveIndex];
+
+    // Vérifier la ligne horizontale
+    if (checkLine(board, 0, lastMoveY, 1, 0, player, 3, startXOut, startYOut, endXOut, endYOut) ||
+        checkLine(board, 0, lastMoveY, -1, 0, player, 3, startXOut, startYOut, endXOut, endYOut)) {
+        return true;
+    }
+
+    // Vérifier la colonne verticale
+    if (checkLine(board, lastMoveX, 0, 0, 1, player, 3, startXOut, startYOut, endXOut, endYOut) ||
+        checkLine(board, lastMoveX, 0, 0, -1, player, 3, startXOut, startYOut, endXOut, endYOut)) {
+        return true;
+    }
+
+    // Vérifier la diagonale (haut-gauche à bas-droit)
+    if (lastMoveX == lastMoveY && checkLine(board, 0, 0, 1, 1, player, 3, startXOut, startYOut, endXOut, endYOut)) {
+        return true;
+    }
+
+    // Vérifier la diagonale (haut-droit à bas-gauche)
+    if (lastMoveX + lastMoveY == 2 && checkLine(board, 2, 0, -1, 1, player, 3, startXOut, startYOut, endXOut, endYOut)) {
+        return true;
+    }
+
+    return false;
+}
+
+
+
+
+
+
+
+
+void morpionGame(){
+
+    bool player1Play = true;
+ 
+    std::vector<String> tableValues = {" ", " ", " ",
+                                  " ", " ", " ",
+                                  " ", " ", " "};
+    
+    while (true){
+        u8g2.clearBuffer();
+        if (!veilleMode){
+            
+             int xOffset;
+            if (player1Play){
+              xOffset=0;
+            }else {
+              xOffset=95;
+            }
+          
+            drawTable(xOffset,tableValues);
+           
+            
+            if (IndexFocused>8){
+               IndexFocused=8;
+            }
+            
+            if (touchRead(button1) < 35 && touchRead(button2) < 35) {
+                if (tableValues[IndexFocused]==" "){
+                   if (player1Play){
+                     tableValues[IndexFocused]="X";
+                   }else {
+                     tableValues[IndexFocused]="O";
+                   }
+                   
+
+                 //Check for win
+
+                  int startX, startY, endX, endY;
+                  if (checkForWin(tableValues, IndexFocused, startX, startY, endX, endY)) {
+
+                  //Anim for move table to the center
+                    for (int i = 1; i<=48; i++){
+                        if (player1Play){
+                            drawTable(xOffset+i,tableValues);
+
+                        }else{
+                            drawTable(xOffset-i,tableValues);
+                        }
+                        delay(10);
+
+                    }
+                    
+                    int animLinePixels;
+                    if (startX==endX || startY == endY){
+                        int animLinePixels = 24;
+                    }else{
+                        int animLinePixels = 34;
+                    }
+
+                    for (int i = 1; i<=animLinePixels; i++){
+                        int coefLonguer = i/animLinePixels;
+
+                        startX=48+startX*10+5;
+                        startY=startY*10+5;
+                        endX=48+endX*10+5;
+                        endY=endY*10+5;
+
+                        u8g2.drawLine(startX,startY,(endX-startX)*coefLonguer+startX, (endY, startY)*coefLonguer+startX);
+                        delay(20);
+                    }
+                    
+                    delay(500);
+                    
+                    while (true){
+                        u8g2.clearBuffer();
+                        drawTable(48, tableValues);
+                        delay(100);
+                        u8g2.drawLine(startX,startY,endX,endY);
+                        u8g2.sendBuffer();
+                        delay(100);
+                        if (touchRead(button1) < 35 || touchRead(button2) < 35){
+                        return;
+                        }
+                    }
+
+                } else {
+                   //animation for change side of table
+                   for (int i = 1; i<96; i++){
+                    if (player1Play){
+                        drawTable(xOffset+i,tableValues);
+
+                    }else{
+                        drawTable(xOffset-i,tableValues);
+                    }
+                    delay(2);
+                   }
+                   player1Play=!player1Play;
+                }
+               }
+            }
+        }else{
+            u8g2.clearBuffer();
+            u8g2.sendBuffer();
+        }
+        
+    }
+}
+
+
+void updateBallPosition(float balPosX, float balPosY, int balAngle) {
+        // Convert angle to radians
+        float radians = balAngle * 3.14159265 / 180.0;
+        
+        // Calculate the change in position
+        float deltaX = cos(radians);
+        float deltaY = sin(radians);
+        
+        // Update ball position
+        balPosX += deltaX;
+        balPosY += deltaY;
+    }
+
+void pongGame(){
+    
+    
+
+    
+	int yPlayer1Pos=0;
+	int yPlayer2Pos=0;
+
+    float balPosX = 64;
+    float balPosY = 16;
+    int balAngle = millis();
+
+	while (true){
+        u8g2.clearBuffer();
+		if (!veilleMode){
+                    
+                    
+            if (touchRead(button1)<35){
+                if (yPlayer1Pos<22){
+                yPlayer1Pos+=2;
+                }
+            }else if (yPlayer1Pos>1){
+                yPlayer1Pos-=2;
+            }
+            
+            if (touchRead(button2)<35){
+                if (yPlayer2Pos<22){
+                yPlayer2Pos+=2;
+                }
+            }else if (yPlayer2Pos>1){
+                yPlayer2Pos-=2;
+            }
+
+
+            u8g2.drawBox(0,yPlayer1Pos,2,12);
+            u8g2.drawBox(126,yPlayer2Pos,2,12);
+
+
+            updateBallPosition(balPosX, balPosY, balAngle);
+
+
+            u8g2.drawCircle(balPosX,balPosY,3);
+
+
+
+		}
+    u8g2.sendBuffer();
+	}
 }
