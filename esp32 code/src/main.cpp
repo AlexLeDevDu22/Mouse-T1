@@ -1038,8 +1038,8 @@ void updateBallPosition(float& balPosX, float& balPosY, int balAngle) {
         float deltaY = sin(radians);
         
         // Update ball position
-        balPosX += deltaX;
-        balPosY += deltaY;
+        balPosX += deltaX*balSpeed;
+        balPosY += deltaY*balSpeed;
     }
 
 void pongGame(){
@@ -1051,85 +1051,95 @@ void pongGame(){
 	int yPlayer1Pos=0;
 	int yPlayer2Pos=0;
 
+    float player1Ulti=0;
+    float player2Ulti=0;
+
     float balPosX = 64;
     float balPosY = 16;
     int balAngle = std::to_string(millis())[0] - '0';
+    float balSpeed=1;
 
-	while (true){
-        u8g2.clearBuffer();
-		if (!veilleMode){
-                    
-                    
-            if (touchRead(button1)<35){
-                if (yPlayer1Pos<22){
-                yPlayer1Pos+=2;
+	while (true){//rounds
+        player1Ulti=0;
+        player2Ulti=0;
+        balSpeed=1;
+        delay(1000);
+        while (true){
+            u8g2.clearBuffer();
+            if (!veilleMode){
+                        
+                        
+                if (touchRead(button1)<35){
+                    if (yPlayer1Pos<22){
+                    yPlayer1Pos+=2;
+                    }
+                }else if (yPlayer1Pos>1){
+                    yPlayer1Pos-=2;
                 }
-            }else if (yPlayer1Pos>1){
-                yPlayer1Pos-=2;
-            }
-            
-            if (touchRead(button2)<35){
-                if (yPlayer2Pos<22){
-                yPlayer2Pos+=2;
+                
+                if (touchRead(button2)<35){
+                    if (yPlayer2Pos<22){
+                    yPlayer2Pos+=2;
+                    }
+                }else if (yPlayer2Pos>1){
+                    yPlayer2Pos-=2;
                 }
-            }else if (yPlayer2Pos>1){
-                yPlayer2Pos-=2;
-            }
 
 
-            u8g2.drawBox(0,yPlayer1Pos,2,12);
-            u8g2.drawBox(126,yPlayer2Pos,2,12);
+                u8g2.drawBox(0,yPlayer1Pos,2,12);
+                u8g2.drawBox(126,yPlayer2Pos,2,12);
 
-            //TODO u8g2.drawStr(0,10,player1Score);
-            //u8g2.drawStr(120,10,player2Score);
-
-
-            for (int i=0;i<16;i++){
-                u8g2.drawLine(i*8,0,i*8+4,0);
-                u8g2.drawLine(4+i*8,31,i*8+8,31);
-            }
-
-            if  ((int)balPosX==5 && yPlayer1Pos-2<=(int)balPosY<=yPlayer1Pos+14){
-                balAngle=270+270-balAngle;
-                balAngle+=std::to_string(millis())[0] - '0';
-            }else if ((int)balPosX==123 && yPlayer2Pos-2<=(int)balPosY<=yPlayer2Pos+14){
-                balAngle=90+90-balAngle;
-                balAngle+=std::to_string(millis())[0] - '0';
-            }else if ((int)balPosX==5){
-                //TODO new round player 1 lose
-            }else if ((int)balPosX==123){
-                //TODO new round player 2 lose
-            }
-
-            if ((int)balPosY==3 || (int)balPosY==29){
-                balAngle=-balAngle;
-                balAngle+=std::to_string(millis())[0] - '0';
-            }
-
-            if (balPosX<5){
-                balPosX=5;
-            }else if (balPosX>123){
-                balPosX=123;
-            }
-            if (balPosY<3){
-                balPosY=3;
-            }else if (balPosY>29){
-                balPosY=29;
-            }
-
-            updateBallPosition(balPosX, balPosY, balAngle);
+                //TODO u8g2.drawStr(0,10,player1Score);
+                //u8g2.drawStr(120,10,player2Score);
 
 
-            u8g2.drawCircle(balPosX,balPosY,3);
+                for (int i=0;i<16;i++){
+                    u8g2.drawLine(i*8,0,i*8+4,0);
+                    u8g2.drawLine(4+i*8,31,i*8+8,31);
+                }
+
+                if  ((int)balPosX==5 && yPlayer1Pos-2<=(int)balPosY<=yPlayer1Pos+14){
+                    balAngle=270+270-balAngle;
+                    balAngle+=std::to_string(millis())[0] - '0';
+                }else if ((int)balPosX==123 && yPlayer2Pos-2<=(int)balPosY<=yPlayer2Pos+14){
+                    balAngle=90+90-balAngle;
+                    balAngle+=std::to_string(millis())[0] - '0';
+                }else if ((int)balPosX==5){
+                    //TODO new round player 1 lose
+                }else if ((int)balPosX==123){
+                    //TODO new round player 2 lose
+                }
+
+                if ((int)balPosY==3 || (int)balPosY==29){
+                    balAngle=-balAngle;
+                    balAngle+=std::to_string(millis())[0] - '0';
+                }
+
+                if (balPosX<5){
+                    balPosX=5;
+                }else if (balPosX>123){
+                    balPosX=123;
+                }
+                if (balPosY<3){
+                    balPosY=3;
+                }else if (balPosY>29){
+                    balPosY=29;
+                }
+
+                updateBallPosition(balPosX, balPosY, balAngle);
 
 
-            if (touchRead(button1) < 35 && touchRead(button2) < 35){
-                delay(40);
-                if (touchRead(button1) > 35 && touchRead(button2) > 35){
-                    return;
+                u8g2.drawCircle(balPosX,balPosY,3);
+
+
+                if (touchRead(button1) < 35 && touchRead(button2) < 35){
+                    delay(40);
+                    if (touchRead(button1) > 35 && touchRead(button2) > 35){
+                        return;
+                    }
                 }
             }
-		}
-    u8g2.sendBuffer();
-	}
+        u8g2.sendBuffer();
+        }
+    }
 }
