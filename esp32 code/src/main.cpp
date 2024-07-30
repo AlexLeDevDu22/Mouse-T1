@@ -26,7 +26,7 @@
 #define SDA_PIN 13
 #define SCL_PIN 15
 
-U8G2_SH1106_128X32_VISIONOX_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE, SCL_PIN, SDA_PIN);
+U8G2_SSD1306_128X32_UNIVISION_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE);
 
 const char* ssid = "Galaxy A20e de Alex";
 const char* password = "Alexdu22";
@@ -54,7 +54,6 @@ const char* password = "Alexdu22";
 httpd_handle_t server = NULL;
 
 camera_fb_t *captured_image = NULL; // Variable globale pour stocker l'image capturée
-String currentTime = ""; // Variable globale pour stocker l'heure actuelle
 
 void capture_image() {
   if (captured_image != NULL) {
@@ -86,24 +85,6 @@ static esp_err_t capture_handler(httpd_req_t *req) {
 }
 
 DynamicJsonDocument jsonRequest(200);
-
-
-// Fonction pour mettre à jour l'heure locale
-void updateLocalTime(void *pvParameters) {
-    while (true) {
-        struct tm timeinfo;
-        if (!getLocalTime(&timeinfo)) {
-        currentTime = "Failed to obtain time";
-        } else {
-        char buffer[64];
-        struct timeval tv;
-        gettimeofday(&tv, NULL);
-        snprintf(buffer, sizeof(buffer), "%02d:%02d:%02d.%03ld", timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec, tv.tv_usec / 1000);
-        currentTime = String(buffer);
-        }
-        delay(1);  // Met à jour toutes les millisecondes
-    }
-}
 
 static esp_err_t json_get_handler(httpd_req_t *req) {  
     if (!jsonRequest.containsKey("type")){
@@ -347,7 +328,7 @@ void showPageText(String text);
 void setup() {
     Wire.begin(SDA_PIN, SCL_PIN);  
     u8g2.begin();
-    u8g2.setFont(u8g2_font_profont17_tr);
+    u8g2.setFont(u8g2_font_ncenB08_tr);
 
     Serial.begin(115200);
 
@@ -405,7 +386,6 @@ void setup() {
 
   // Crée une tâche pour mettre à jour l'heure locale en arrière-plan
   xTaskCreate(startServer, "startServer", 2048, NULL, 1, NULL);
-  xTaskCreate(updateLocalTime, "updateLocalTime", 2048, NULL, 1, NULL);
   xTaskCreate(updateIndexFocused, "updateIndexFocused", 2048, NULL, 1, NULL);
   xTaskCreate(veilleModeManager, "veilleModeManager", 2048, NULL, 1, NULL);
 
@@ -563,7 +543,7 @@ void showPageOverview(std::vector<String>& OverviewDatasList) {
         viewFocused = -indexFocused+2;
     }
 
-    if (lastViewFocused==-1){
+    if (lastViewFocused==-1 && indexFocused<1){
         lastViewFocused=viewFocused;
     }
 
@@ -582,7 +562,7 @@ void showPageOverview(std::vector<String>& OverviewDatasList) {
             itoa(i+1, oneInt, 10);
             x = strlen(oneInt)*8.5+4;
             if (indexFocused==i){
-                u8g2.drawBox(x, y+1 , u8g2.getStrWidth(bloc["text"])+1, lineHeight-1);
+                u8g2.drawBox(x, y , u8g2.getStrWidth(bloc["text"])+1, lineHeight);
                 u8g2.setDrawColor(0);
                 if (u8g2.getStrWidth(bloc["text"])>128-x){
                     if (overviewXMoving>=u8g2.getStrWidth(bloc["text"])+40){
@@ -596,16 +576,10 @@ void showPageOverview(std::vector<String>& OverviewDatasList) {
             }else{
                 u8g2.drawStr(x+1,y+lineHeight - 2, bloc["text"]);            
             }
-            u8g2.setDrawColor(0);    
-            u8g2.drawBox(0, y , u8g2.getStrWidth(oneInt)+4, lineHeight+1);
-            u8g2.setDrawColor(1);    
+            u8g2.setDrawColor(0);
+            u8g2.drawBox(0, y , x, lineHeight);
+            u8g2.setDrawColor(1);
             u8g2.drawStr(0,y+lineHeight , oneInt);
-
-            if (i==OverviewDatasList.size()-1 && OverviewDatasList.size()>3){
-                for (int xEndLine = 1; xEndLine < 128; xEndLine+=16) {
-                    u8g2.drawLine(xEndLine,y+lineHeight+10,xEndLine+8,y+lineHeight+10);
-                }
-            }
         }
         u8g2.sendBuffer();
     }else{
@@ -630,12 +604,6 @@ void showPageOverview(std::vector<String>& OverviewDatasList) {
                 }
                 u8g2.drawStr(x+1,lineHeight + y - 2, bloc["text"]);
                 u8g2.setDrawColor(1); 
-
-                if (i==OverviewDatasList.size()-1 && OverviewDatasList.size()>3){
-                    for (int xEndLine = 1; xEndLine < 128; xEndLine+=16) {
-                        u8g2.drawLine(xEndLine,y+lineHeight+10,xEndLine+8,y+lineHeight+10);
-                    }
-                }
             }
             u8g2.sendBuffer();
         }
@@ -645,6 +613,7 @@ void showPageOverview(std::vector<String>& OverviewDatasList) {
 
 void loop() {
     if (!veilleMode){
+        u8g2.setFont(u8g2_font_ncenB08_tr);
         if (WiFi.status() == WL_CONNECTED && needWifi || !needWifi){
             if(pageName!=lastPageName){
                 IndexFocused=0;
@@ -704,7 +673,7 @@ void loop() {
                 if (touchRead(button2) < 35) {
                     capture_image(); // Enregistrer la nouvelle image qui sera mise en ligne
                     jsonRequest["type"] = "chatGPT asking"; // request info
-                    jsonRequest["time"] = currentTime;
+                    jsonRequest["time"] = millis();
                     jsonRequest["id"] = random(1000000);
                     jsonRequest["image source"] = "http://"+WiFi.localIP().toString()+"/capture";
                     jsonRequest["asking type"] = askingTypeSelected;
@@ -724,7 +693,7 @@ void loop() {
                 if (touchRead(button1) < 35 && touchRead(button2) < 35) {
                     if (IndexFocused!=0){
                         deserializeJson(jsonRequest, "{}"); // reset request
-                        jsonRequest["time"] = currentTime;
+                        jsonRequest["time"] = millis();
                         jsonRequest["id"] = random(1000000);
                         DynamicJsonDocument matiere(200);
                         deserializeJson(matiere, overviewMatieresList[IndexFocused]);
@@ -851,31 +820,29 @@ void loop() {
 
 
 
-void drawTable(int xOffset, std::vector<String> tableValues){
+void drawTable(int xOffset, std::vector<String> tableValues,bool showIndex){
     u8g2.clearBuffer();
 
     for (int collumnBorder = 0; collumnBorder<4; collumnBorder++){
-        u8g2.drawBox(xOffset+collumnBorder*10, 0, 1, 62);
+        u8g2.drawBox(xOffset+collumnBorder*10, 0, 1, 30);
     }
 
     for (int rowBorder = 0; rowBorder<4; rowBorder++){
         
-        u8g2.drawBox(xOffset, rowBorder * 10 , 32, 1);
+        u8g2.drawBox(xOffset, rowBorder * 10 , 30, 1);
         
     }
 
     for (int x = 0; x<3; x++){
         for (int y = 0; y<3; y++){
 
-        if (IndexFocused == x+y*3){
+        if (IndexFocused == x+y*3 && showIndex){
             u8g2.drawBox(xOffset + x*10, y*10,10,10);
             u8g2.setDrawColor(0);
         }
 
         if (tableValues[x+y*3].c_str()!=" "){
-            const char* strToShow=tableValues[x+y*3].c_str();
-            
-            u8g2.drawStr(xOffset + x*10, y*10+9,strToShow);
+            u8g2.drawStr(xOffset + x*10 + 3, y*10+9,tableValues[x+y*3].c_str());
         }
         
         u8g2.setDrawColor(1);
@@ -886,20 +853,15 @@ void drawTable(int xOffset, std::vector<String> tableValues){
 
 }
 
-// Vérifie si une ligne ou colonne ou diagonale contient une séquence continue de symboles du joueur
-bool checkLine(const std::vector<String>& board, int startX, int startY, int dx, int dy, const String& player, int length, int& startXOut, int& startYOut, int& endXOut, int& endYOut) {
+bool checkLine(const std::vector<String>& tableValues, int startX, int startY, int dx, int dy, const String& player, int length,                std::vector<int>& winningIndices) {
     int count = 0;
     int x = startX, y = startY;
+    winningIndices.clear();
     for (int i = 0; i < length; ++i) {
-        if (x < 0 || x >= 3 || y < 0 || y >= 3 || board[y * 3 + x] != player) {
+        if (x < 0 || x >= 3 || y < 0 || y >= 3 || tableValues[y * 3 + x] != player) {
             return false;
         }
-        if (count == 0) {
-            startXOut = x;
-            startYOut = y;
-        }
-        endXOut = x;
-        endYOut = y;
+        winningIndices.push_back(y * 3 + x);
         count++;
         x += dx;
         y += dy;
@@ -913,34 +875,31 @@ void indexToCoordinates(int index, int& x, int& y) {
     y = index / 3;
 }
 
-// Vérifie s'il y a une victoire en regardant uniquement les lignes qui contiennent le dernier coup
-bool checkForWin(const std::vector<String>& board, int lastMoveIndex, int& startXOut, int& startYOut, int& endXOut, int& endYOut) {
+bool checkForWin(const std::vector<String>& tableValues, int lastMoveIndex, std::vector<int>& winningIndices) {
     int lastMoveX, lastMoveY;
     indexToCoordinates(lastMoveIndex, lastMoveX, lastMoveY);
-    String player = board[lastMoveIndex];
-
+    String player = tableValues[lastMoveIndex];
+    
     // Vérifier la ligne horizontale
-    if (checkLine(board, 0, lastMoveY, 1, 0, player, 3, startXOut, startYOut, endXOut, endYOut) ||
-        checkLine(board, 0, lastMoveY, -1, 0, player, 3, startXOut, startYOut, endXOut, endYOut)) {
+    if (checkLine(tableValues, 0, lastMoveY, 1, 0, player, 3, winningIndices)) {
         return true;
     }
-
+    
     // Vérifier la colonne verticale
-    if (checkLine(board, lastMoveX, 0, 0, 1, player, 3, startXOut, startYOut, endXOut, endYOut) ||
-        checkLine(board, lastMoveX, 0, 0, -1, player, 3, startXOut, startYOut, endXOut, endYOut)) {
+    if (checkLine(tableValues, lastMoveX, 0, 0, 1, player, 3, winningIndices)) {
         return true;
     }
-
+    
     // Vérifier la diagonale (haut-gauche à bas-droit)
-    if (lastMoveX == lastMoveY && checkLine(board, 0, 0, 1, 1, player, 3, startXOut, startYOut, endXOut, endYOut)) {
+    if (lastMoveX == lastMoveY && checkLine(tableValues, 0, 0, 1, 1, player, 3, winningIndices)) {
         return true;
     }
-
+    
     // Vérifier la diagonale (haut-droit à bas-gauche)
-    if (lastMoveX + lastMoveY == 2 && checkLine(board, 2, 0, -1, 1, player, 3, startXOut, startYOut, endXOut, endYOut)) {
+    if (lastMoveX + lastMoveY == 2 && checkLine(tableValues, 2, 0, -1, 1, player, 3, winningIndices)) {
         return true;
     }
-
+    
     return false;
 }
 
@@ -952,12 +911,14 @@ bool checkForWin(const std::vector<String>& board, int lastMoveIndex, int& start
 
 
 void morpionGame(){
+    u8g2.setFont(u8g2_font_6x12_tr);
+
 
     bool player1Play = true;
  
     std::vector<String> tableValues = {" ", " ", " ",
-                                  " ", " ", " ",
-                                  " ", " ", " "};
+                                       " ", " ", " ",
+                                       " ", " ", " "};
     
     while (true){
         u8g2.clearBuffer();
@@ -970,7 +931,7 @@ void morpionGame(){
               xOffset=95;
             }
           
-            drawTable(xOffset,tableValues);
+            drawTable(xOffset,tableValues,true);
            
             
             if (IndexFocused>8){
@@ -986,70 +947,78 @@ void morpionGame(){
                    }
                    
 
-                 //Check for win
+                    //Check for win
 
-                  int startX, startY, endX, endY;
-                  if (checkForWin(tableValues, IndexFocused, startX, startY, endX, endY)) {
+                    std::vector<int> winningIndices;
+                    if (checkForWin(tableValues, IndexFocused, winningIndices)) {
 
-                  //Anim for move table to the center
-                    for (int i = 1; i<=48; i++){
-                        if (player1Play){
-                            drawTable(xOffset+i,tableValues);
+                        //Anim for move table to the center
+                        for (int i = 1; i<=48; i++){
+                            if (player1Play){
+                                drawTable(xOffset+i,tableValues,false);
 
-                        }else{
-                            drawTable(xOffset-i,tableValues);
+                            }else{
+                                drawTable(xOffset-i,tableValues,false);
+                            }
+                            delay(10);
+
                         }
-                        delay(10);
 
-                    }
-                    
-                    int animLinePixels;
-                    if (startX==endX || startY == endY){
-                        int animLinePixels = 24;
-                    }else{
-                        int animLinePixels = 34;
-                    }
-
-                    for (int i = 1; i<=animLinePixels; i++){
-                        int coefLonguer = i/animLinePixels;
-
-                        startX=48+startX*10+5;
-                        startY=startY*10+5;
-                        endX=48+endX*10+5;
-                        endY=endY*10+5;
-
-                        u8g2.drawLine(startX,startY,(endX-startX)*coefLonguer+startX, (endY, startY)*coefLonguer+startX);
-                        delay(20);
-                    }
-                    
-                    delay(500);
-                    
-                    while (true){
-                        u8g2.clearBuffer();
-                        drawTable(48, tableValues);
-                        delay(100);
-                        u8g2.drawLine(startX,startY,endX,endY);
-                        u8g2.sendBuffer();
-                        delay(100);
-                        if (touchRead(button1) < 35 || touchRead(button2) < 35){
-                        return;
+                        std::vector<String> noWinningTableValues = tableValues;
+                                                                  
+                        for (int i=0;i<3;i++){
+                            noWinningTableValues[winningIndices[i]]=" ";
                         }
-                    }
 
-                } else {
-                   //animation for change side of table
-                   for (int i = 1; i<96; i++){
-                    if (player1Play){
-                        drawTable(xOffset+i,tableValues);
+                        for (int t=300;t>0;t-=40){
+                            drawTable(48,tableValues,false);
+                            delay(t);
+                            drawTable(48,noWinningTableValues,false);
+                            delay(t);
+                        }
+                        drawTable(48,tableValues,false);
 
-                    }else{
-                        drawTable(xOffset-i,tableValues);
+                        while (true){
+                            if (touchRead(button1) < 35 || touchRead(button2) < 35){
+                                return;
+                            }
+                        }
+
+                    } else {
+                        //animation for change side of table
+                        for (int i = 1; i<96; i++){
+                            if (player1Play){
+                                drawTable(xOffset+i,tableValues,true);
+
+                            }else{
+                                drawTable(xOffset-i,tableValues,true);
+                            }
+                            delay(1);
+                        }
+                        player1Play=!player1Play;
                     }
-                    delay(2);
-                   }
-                   player1Play=!player1Play;
-                }
                }
+            }
+            int casesEmpty=0;
+            for (int i = 0; i<9;i++){
+                if (tableValues[i] == " "){
+                    casesEmpty++;
+                }
+            }
+            if (casesEmpty==0){
+                while (true){
+
+                    for (int t=300;t>0;t-=40){
+                        drawTable(48,tableValues,false);
+                        delay(t);
+                        u8g2.clearBuffer();
+                        delay(t);
+                    }
+                    
+                    if (touchRead(button1) < 35 || touchRead(button2) < 35){
+                        return;
+                    }
+                }
             }
         }else{
             u8g2.clearBuffer();
@@ -1060,7 +1029,7 @@ void morpionGame(){
 }
 
 
-void updateBallPosition(float balPosX, float balPosY, int balAngle) {
+void updateBallPosition(float& balPosX, float& balPosY, int balAngle) {
         // Convert angle to radians
         float radians = balAngle * 3.14159265 / 180.0;
         
@@ -1076,14 +1045,15 @@ void updateBallPosition(float balPosX, float balPosY, int balAngle) {
 void pongGame(){
     
     
-
+    int player1Score=0;
+    int player2Score=0;
     
 	int yPlayer1Pos=0;
 	int yPlayer2Pos=0;
 
     float balPosX = 64;
     float balPosY = 16;
-    int balAngle = millis();
+    int balAngle = std::to_string(millis())[0] - '0';
 
 	while (true){
         u8g2.clearBuffer();
@@ -1110,6 +1080,42 @@ void pongGame(){
             u8g2.drawBox(0,yPlayer1Pos,2,12);
             u8g2.drawBox(126,yPlayer2Pos,2,12);
 
+            //TODO u8g2.drawStr(0,10,player1Score);
+            //u8g2.drawStr(120,10,player2Score);
+
+
+            for (int i=0;i<16;i++){
+                u8g2.drawLine(i*8,0,i*8+4,0);
+                u8g2.drawLine(4+i*8,31,i*8+8,31);
+            }
+
+            if  ((int)balPosX==5 && yPlayer1Pos-2<=(int)balPosY<=yPlayer1Pos+14){
+                balAngle=270+270-balAngle;
+                balAngle+=std::to_string(millis())[0] - '0';
+            }else if ((int)balPosX==123 && yPlayer2Pos-2<=(int)balPosY<=yPlayer2Pos+14){
+                balAngle=90+90-balAngle;
+                balAngle+=std::to_string(millis())[0] - '0';
+            }else if ((int)balPosX==5){
+                //TODO new round player 1 lose
+            }else if ((int)balPosX==123){
+                //TODO new round player 2 lose
+            }
+
+            if ((int)balPosY==3 || (int)balPosY==29){
+                balAngle=-balAngle;
+                balAngle+=std::to_string(millis())[0] - '0';
+            }
+
+            if (balPosX<5){
+                balPosX=5;
+            }else if (balPosX>123){
+                balPosX=123;
+            }
+            if (balPosY<3){
+                balPosY=3;
+            }else if (balPosY>29){
+                balPosY=29;
+            }
 
             updateBallPosition(balPosX, balPosY, balAngle);
 
@@ -1117,7 +1123,12 @@ void pongGame(){
             u8g2.drawCircle(balPosX,balPosY,3);
 
 
-
+            if (touchRead(button1) < 35 && touchRead(button2) < 35){
+                delay(40);
+                if (touchRead(button1) > 35 && touchRead(button2) > 35){
+                    return;
+                }
+            }
 		}
     u8g2.sendBuffer();
 	}
