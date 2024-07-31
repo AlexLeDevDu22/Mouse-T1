@@ -20,6 +20,7 @@
 #include <driver/adc.h>
 #include <cmath>
 #include <random>
+#include <stdlib.h>
 
 // Commands
 #define button1 14
@@ -146,7 +147,10 @@ std::vector<String> overviewAskingTypeList={"{\"text\":\"back to menu\"}",
 std::vector<String> OverviewGamesList={ "{\"text\":\"back to menu\"}",
                                         "{\"text\":\"Morpion\"}",
                                         "{\"text\":\"Pong\"}",
-                                        "{\"text\":\"Test Game\"}",
+                                        "{\"text\":\"Dino Jump\"}",
+                                        "{\"text\":\"Geometry Dash\"}",
+                                        "{\"text\":\"sudoku generator\"}",
+                                        "{\"text\":\"Test Game\"}"
                                         };
 String simpleTextViewText="";
 std::vector<String> OverviewDatasList;
@@ -162,6 +166,9 @@ bool veilleMode=false;
 
 void morpionGame();
 void pongGame();
+void dinoGame();
+void geometryDash();
+void sudokuGenerator();
 void testGame();
 
 void updateIndexFocused(void *pvParameters) {
@@ -753,6 +760,12 @@ void loop() {
                     morpionGame();
                 }else if (gameChoiced=="Pong") {
                     pongGame();
+                }else if (gameChoiced=="Dino Jump") {
+                    dinoGame();
+                }else if (gameChoiced=="Geometry Dash") {
+                    geometryDash();
+                }else if (gameChoiced=="sudoku generator") {
+                    sudokuGenerator();
                 }else if (gameChoiced=="Test Game") {
                     testGame();
                 }
@@ -1041,7 +1054,13 @@ void morpionGame(){
 }
 
 
-void updateBallPosition(float& balPosX, float& balPosY, int balAngle, float balSpeed, bool isSmash, int UltiTargetTo,int yPlayer1Pos, int yPlayer2Pos) {
+void updateBallPosition(std::vector<float>& balPos, int balAngle, float balSpeed, std::vector<bool> isSmash, std::vector<bool> UltiPlayersTarget,std::vector<float> yPlayerPos, std::vector<bool> UltiAllDirections) {
+
+    if (UltiAllDirections[0]){
+        balAngle=millis()%90+135;
+    }else if (UltiAllDirections[1]){
+        balAngle=millis()%180-45;
+    }
 
     // Convert angle to radians
     float radians = balAngle * 3.14159265 / 180.0;
@@ -1050,30 +1069,30 @@ void updateBallPosition(float& balPosX, float& balPosY, int balAngle, float balS
     float deltaX = cos(radians);
     float deltaY = sin(radians);
 
-    if (isSmash){
-        balSpeed += 0.5;
+    if (isSmash[0] || isSmash[1]){
+        balSpeed += 0.7;
     }
         
     // Update ball position
-    balPosX += deltaX*balSpeed;
-    balPosY += deltaY*balSpeed;
+    balPos[0] += deltaX*balSpeed;
+    balPos[1] += deltaY*balSpeed;
 
-    if(UltiTargetTo==1 && balPosX>64 ) {
-        balPosY=yPlayer1Pos+22;
-        if (balPosY>31){
-            balPosY=balPosY-32;
+    if(UltiPlayersTarget[0] && balPos[0]>40 ) {
+        balPos[1]=(int)yPlayerPos[0]+22;
+        if (balPos[1]>31){
+            balPos[1]=balPos[1]-32;
         }
-    }else if(UltiTargetTo==2 && balPosX<64 ){
-        balPosY=yPlayer2Pos+22;
-        if (balPosY>31){
-            balPosY=balPosY-32;
+    }else if(UltiPlayersTarget[1] && balPos[0]<88 ){
+        balPos[1]=(int)yPlayerPos[1]+22;
+        if (balPos[1]>31){
+            balPos[1]=balPos[1]-32;
         }
     }
 }
 
 std::string getRandomUlti() {
 
-    const std::vector<std::string> vec = {"Smash", "Slow", "Target", "Narrowing"};
+    const std::vector<std::string> vec = {"Smash", "Slow", "Target", "Narrowing", "All Directions"};
 
     Serial.println(vec[millis()%vec.size()].c_str());
     return vec[millis()%vec.size()];
@@ -1081,15 +1100,10 @@ std::string getRandomUlti() {
 
 void pongGame(){
     
+    std::vector<int> playersScore={0,0};
     
-    int player1Score=0;
-    int player2Score=0;
-
-    float player1Ulti=0;
-    std::string namePlayer1Ulti="";
-
-    float player2Ulti=0;
-    std::string namePlayer2Ulti="";
+    std::vector<float> playersUlti={16,16};
+    std::vector<std::string> namePlayersUlti={"",""};
 
     int roundsWinForFinish;
 
@@ -1097,7 +1111,7 @@ void pongGame(){
         if (!veilleMode){
             u8g2.clearBuffer();
 
-            u8g2.drawStr(20,u8g2.getMaxCharHeight(), "nombre de manche a gagner");
+            u8g2.drawStr(20,u8g2.getMaxCharHeight(), "nombres de manches gagnantes");
 
             char roundsWinForFinishStr[10];
             itoa(IndexFocused, roundsWinForFinishStr, 10);
@@ -1117,249 +1131,249 @@ void pongGame(){
     }
 
 	while (true){//rounds
-        float yPlayer1Pos=0;
-	    float yPlayer2Pos=0;
+        std::vector<float> yPlayerPos={0,0};
 
         int balAngle = std::to_string(millis())[0] - '0';
         float balSpeed=1;
-        float balPosX = 64;
-        float balPosY = 16;
+        std::vector<float> balPos = {64,16};
 
         int lastPlayerTouchBal=0;
 
         bool roundFinished=false;
 
         //Ulti vars
-        bool isSmash=false;
+        std::vector<bool> ultiPlayerSmash={false,false};
 
-        int ultiPlayerSlowed=0;
+        std::vector<bool> ultiPlayerSlowed={false,false};
 
-        int UltiTargetTo=0;
+        std::vector<bool>  UltiPlayersTarget={false,false};
 
-        int player1Height=12;
-        int player2Height=12;
+        std::vector<int> playersHeight={12,12};
+
+        std::vector<bool> UltiAllDirections={false, false};
 
         while (true){
             u8g2.clearBuffer();
             //if (!veilleMode){
 
 
-                if (player1Ulti>=32-u8g2.getMaxCharHeight()-3){
-                    if (namePlayer1Ulti==""){
-                        namePlayer1Ulti=getRandomUlti();
+                if (playersUlti[0]>=32-u8g2.getMaxCharHeight()-3){
+                    if (namePlayersUlti[0]==""){
+                        namePlayersUlti[0]=getRandomUlti();
                     }
 
-                    if (namePlayer1Ulti=="Smash"){
-                        isSmash=true;
+                    if (namePlayersUlti[0]=="Smash"){
+                        ultiPlayerSmash[0]=true;
                         u8g2.setFont(u8g2_font_twelvedings_t_all);
                         u8g2.drawGlyph(10, 20, 41);
-                    }else if (namePlayer1Ulti=="Slow"){
-                        ultiPlayerSlowed=2;
+                    }else if (namePlayersUlti[0]=="Slow"){
+                        ultiPlayerSlowed[1]=true;
                         u8g2.setFont(u8g2_font_twelvedings_t_all);
                         u8g2.drawGlyph(10, 20, 0x0067);
-                    }else if (namePlayer1Ulti=="Target"){
-                        UltiTargetTo=2;
+                    }else if (namePlayersUlti[0]=="Target"){
+                        UltiPlayersTarget[1]=true;
                         u8g2.setFont(u8g2_font_unifont_t_86);
                         u8g2.drawGlyph(10, 20, 0x2b59);
-                    }else if (namePlayer1Ulti=="Narrowing"){
-                        player2Height=7;
+                    }else if (namePlayersUlti[0]=="Narrowing"){
+                        playersHeight[1]=7;
                         u8g2.setFont(u8g2_font_unifont_t_symbols);
                         u8g2.drawGlyph(10, 20, 0x21d4);
+                    }else if (namePlayersUlti[0]=="All Directions"){
+                        UltiAllDirections[0]=true;
+                        u8g2.setFont(u8g2_font_cu12_t_symbols);
+                        u8g2.drawGlyph(103, 20, 0x219b);
                     }
+
                     u8g2.setFont(u8g2_font_ncenB08_tr);
 
-                    
-                    if (namePlayer1Ulti!="Smash"){
-                        isSmash=false;
-                    }
-                    if (namePlayer1Ulti!="Slow"){
-                        ultiPlayerSlowed=0;
-                    }
-                    if (namePlayer1Ulti!="Target"){
-                        UltiTargetTo=0;
-                    }
-                    if (namePlayer1Ulti!="Narrowing"){
-                        player2Height=12;
-                    }
+                }else{
+                    ultiPlayerSmash[0]=false;
+                    ultiPlayerSlowed[1]=false;
+                    UltiPlayersTarget[1]=false;
+                    playersHeight[1]=12;
+                    UltiAllDirections[0]=false;
+
                 }
 
-                if (player2Ulti>=32-u8g2.getMaxCharHeight()-3){
+                if (playersUlti[1]>=32-u8g2.getMaxCharHeight()-3){
 
-                    if (namePlayer2Ulti==""){
-                        namePlayer2Ulti=getRandomUlti();
+                    if (namePlayersUlti[1]==""){
+                        namePlayersUlti[1]=getRandomUlti();
                     }
                     
-                    if (namePlayer2Ulti=="Smash"){
-                        isSmash=true;
+                    if (namePlayersUlti[1]=="Smash"){
+                        ultiPlayerSmash[1]=true;
                         u8g2.setFont(u8g2_font_twelvedings_t_all);
                         u8g2.drawGlyph(103, 20, 40);
-                    }else if (namePlayer2Ulti=="Slow"){
-                        ultiPlayerSlowed=1;
+                    }else if (namePlayersUlti[1]=="Slow"){
+                        ultiPlayerSlowed[0]=true;
                         u8g2.setFont(u8g2_font_twelvedings_t_all);
                         u8g2.drawGlyph(103, 20, 0x0067);
-                    }else if (namePlayer2Ulti=="Target"){
-                        UltiTargetTo=1;
+                    }else if (namePlayersUlti[1]=="Target"){
+                        UltiPlayersTarget[0]=true;
                         u8g2.setFont(u8g2_font_unifont_t_86);
                         u8g2.drawGlyph(103, 20, 0x2b59);
-                    }else if (namePlayer2Ulti=="Narrowing"){
-                        player1Height=7;
+                    }else if (namePlayersUlti[1]=="Narrowing"){
+                        playersHeight[0]=7;
                         u8g2.setFont(u8g2_font_8x13_t_symbols);
                         u8g2.drawGlyph(103, 20, 0x2195);
+                    }else if (namePlayersUlti[1]=="All Directions"){
+                        UltiAllDirections[1]=true;
+                        u8g2.setFont(u8g2_font_cu12_t_symbols);
+                        u8g2.drawGlyph(103, 20, 0x219c);
                     }
 
                     u8g2.setFont(u8g2_font_ncenB08_tr);
+                
+                }else{
+                        ultiPlayerSmash[0]=false;
+                        ultiPlayerSlowed[0]=false;
+                        UltiPlayersTarget[0]=false;
+                        playersHeight[0]=12;
+                        UltiAllDirections[1]=false;
 
-                    
-                    if (namePlayer2Ulti!="Smash"){
-                        isSmash=false;
-                    }
-                    if (namePlayer2Ulti!="Slow"){
-                        ultiPlayerSlowed=0;
-                    }
-                    if (namePlayer2Ulti!="Target"){
-                        UltiTargetTo=0;
-                    }
-                    if (namePlayer1Ulti!="Narrowing"){
-                        player1Height=12;
-                    }
                 }
                         
                         
                 if (touchRead(button1)<35){
-                    if (ultiPlayerSlowed!=1){
-                        yPlayer1Pos+=1;
+                    if (ultiPlayerSlowed[0]){
+                        yPlayerPos[0]+=0.4;
                     }else{
-                        yPlayer1Pos+=0.5;
+                        yPlayerPos[0]+=1;
                     }
-                    if (yPlayer1Pos>=32){
-                        yPlayer1Pos=0;
+                    if (yPlayerPos[0]>=32){
+                        yPlayerPos[0]=0;
                     }
                 }
                 if (touchRead(button2)<35){
-                    if (ultiPlayerSlowed!=2){
-                        yPlayer2Pos+=1;
+                    if (ultiPlayerSlowed[1]){
+                        yPlayerPos[1]+=0.4;
                     }else{
-                        yPlayer2Pos+=0.5;
+                        yPlayerPos[1]+=1;
                     }
-                    if (yPlayer2Pos>=32){
-                        yPlayer2Pos=0;
+                    if (yPlayerPos[1]>=32){
+                        yPlayerPos[1]=0;
+                    }else{
+                        yPlayerPos[1]+=0.5;
                     }
                 }
 
-                char player1ScoreStr[10];
-                itoa(player1Score, player1ScoreStr, 10);
-                int player1ScoreStrWidth = u8g2.getStrWidth(player1ScoreStr);
+                std::vector<std::string> playersScoreStr = {"", ""};
+                std::vector<int> playersScoreStrWidth = {0, 0};
 
-                char player2ScoreStr[10];
-                itoa(player2Score, player2ScoreStr, 10);
-                int player2ScoreStrWidth = u8g2.getStrWidth(player2ScoreStr);
+                // Conversion des scores en chaînes de caractères
+                playersScoreStr[0] = std::to_string(playersScore[0]);
+                playersScoreStrWidth[0] = u8g2.getStrWidth(playersScoreStr[0].c_str());
 
-                if (roundsWinForFinish>1){
+                playersScoreStr[1] = std::to_string(playersScore[1]);
+                playersScoreStrWidth[1] = u8g2.getStrWidth(playersScoreStr[1].c_str());
 
-                    u8g2.drawStr(0,u8g2.getMaxCharHeight(),player1ScoreStr);
-                    u8g2.drawStr(128-player2ScoreStrWidth,u8g2.getMaxCharHeight(),player2ScoreStr);
-
-                }
-                u8g2.drawBox(player1ScoreStrWidth+2,(int)yPlayer1Pos,2,player1Height);
-                if (yPlayer1Pos>32-player1Height){
-                    u8g2.drawBox(player1ScoreStrWidth+2,0,2,player1Height-(32-(int)yPlayer1Pos));
+                if (roundsWinForFinish > 1) {
+                    u8g2.drawStr(0, u8g2.getMaxCharHeight(), playersScoreStr[0].c_str());
+                    
+                    u8g2.drawStr(128 - playersScoreStrWidth[1], u8g2.getMaxCharHeight(), playersScoreStr[1].c_str());
                 }
 
-                u8g2.drawBox(128-player2ScoreStrWidth-4,(int)yPlayer2Pos,2,player2Height);
-                if (yPlayer2Pos>32-player2Height){
-                    u8g2.drawBox(128-player2ScoreStrWidth-4,0,2,player2Height-(32-(int)yPlayer2Pos));
+                u8g2.drawBox(playersScoreStrWidth[0]+2,(int)yPlayerPos[0],2,playersHeight[0]);
+                if (yPlayerPos[0]>32-playersHeight[0]){
+                    u8g2.drawBox(playersScoreStrWidth[0]+2,0,2,playersHeight[0]-(32-(int)yPlayerPos[0]));
+                }
+
+                u8g2.drawBox(128-playersScoreStrWidth[1]-4,(int)yPlayerPos[1],2,playersHeight[1]);
+                if (yPlayerPos[1]>32-playersHeight[1]){
+                    u8g2.drawBox(128-playersScoreStrWidth[1]-4,0,2,playersHeight[1]-(32-(int)yPlayerPos[1]));
                 }
 
                 for (int i=0;i<16;i++){
-                    u8g2.drawLine(i*8+player1ScoreStrWidth,0,i*8+4+player1ScoreStrWidth,0);
-                    u8g2.drawLine(4+i*8+player1ScoreStrWidth,31,i*8+8+player1ScoreStrWidth,31);
+                    u8g2.drawLine(i*8+playersScoreStrWidth[0],0,i*8+4+playersScoreStrWidth[0],0);
+                    u8g2.drawLine(4+i*8+playersScoreStrWidth[0],31,i*8+8+playersScoreStrWidth[0],31);
                 }
             
-                u8g2.drawLine(0,u8g2.getMaxCharHeight()+1,player1ScoreStrWidth,u8g2.getMaxCharHeight()+1);
-                if (player1Ulti<32-u8g2.getMaxCharHeight()-3){
-                    u8g2.drawBox(0,31-player1Ulti,3,32);
-                    u8g2.drawBox(1,31-player1Ulti-1,1,1);
+                u8g2.drawLine(0,u8g2.getMaxCharHeight()+1,playersScoreStrWidth[0],u8g2.getMaxCharHeight()+1);
+                if (playersUlti[0]<32-u8g2.getMaxCharHeight()-3){
+                    u8g2.drawBox(0,31-playersUlti[0],3,32);
+                    u8g2.drawBox(1,31-playersUlti[0]-1,1,1);
                 }
 
-                u8g2.drawLine(128-player2ScoreStrWidth,u8g2.getMaxCharHeight()+1,128,u8g2.getMaxCharHeight()+1);
-                if (player2Ulti<32-u8g2.getMaxCharHeight()-3){
-                    u8g2.drawBox(125,31-player2Ulti,3,32);
-                    u8g2.drawBox(126,31-player2Ulti-1,1,1);
+                u8g2.drawLine(128-playersScoreStrWidth[1],u8g2.getMaxCharHeight()+1,128,u8g2.getMaxCharHeight()+1);
+                if (playersUlti[1]<32-u8g2.getMaxCharHeight()-3){
+                    u8g2.drawBox(125,31-playersUlti[1],3,32);
+                    u8g2.drawBox(126,31-playersUlti[1]-1,1,1);
                 }
 
-                if  ((int)balPosX==5+player1ScoreStrWidth && (((int)yPlayer1Pos-3<=(int)balPosY && (int)balPosY<=(int)yPlayer1Pos+player1Height+3) ||  balPosY<=(int)yPlayer1Pos-(32-player1Height) )){
+                if  ((int)balPos[0]==5+playersScoreStrWidth[0] && (((int)yPlayerPos[0]-3<=(int)balPos[1] && (int)balPos[1]<=(int)yPlayerPos[0]+playersHeight[0]+3) ||  balPos[1]<=(int)yPlayerPos[0]-(32-playersHeight[0]) )){
 
                     balAngle=270+270-balAngle;
                     balAngle+=std::to_string(millis())[0] - '0';
-                    balPosX=6+player1ScoreStrWidth;
+                    balPos[0]=6+playersScoreStrWidth[0];
 
                     lastPlayerTouchBal=1;
 
-                    if (player1Ulti<32-u8g2.getMaxCharHeight()-2){
-                        player1Ulti+=2;
+                    if (playersUlti[0]<32-u8g2.getMaxCharHeight()-2){
+                        playersUlti[0]+=2;
                     }
 
-                    if (player2Ulti>=32-u8g2.getMaxCharHeight()-3){
-                        player2Ulti=0;
-                        namePlayer2Ulti="";
+                    if (playersUlti[1]>=32-u8g2.getMaxCharHeight()-3){
+                        playersUlti[1]=0;
+                        namePlayersUlti[1]="";
                     }
 
-                }else if ((int)balPosX==123-player2ScoreStrWidth && (((int)yPlayer2Pos-3<=(int)balPosY && (int)balPosY<=(int)yPlayer2Pos+player2Height+3) || balPosY<=(int)yPlayer2Pos-(32-player1Height))){
+                }else if ((int)balPos[0]==123-playersScoreStrWidth[1] && (((int)yPlayerPos[1]-3<=(int)balPos[1] && (int)balPos[1]<=(int)yPlayerPos[1]+playersHeight[1]+3) || balPos[1]<=(int)yPlayerPos[1]-(32-playersHeight[1]))){
                     balAngle=90+90-balAngle;
                     balAngle+=std::to_string(millis())[0] - '0';
                     lastPlayerTouchBal=2;
-                    balPosX=122-player2ScoreStrWidth;
+                    balPos[0]=122-playersScoreStrWidth[1];
 
-                    if (player2Ulti<32-u8g2.getMaxCharHeight()-2){
-                        player2Ulti+=2;
+                    if (playersUlti[1]<32-u8g2.getMaxCharHeight()-2){
+                        playersUlti[1]+=2;
                     }
 
-                    if (player1Ulti>=32-u8g2.getMaxCharHeight()-3){
-                        player1Ulti=0;
-                        namePlayer1Ulti="";
+                    if (playersUlti[0]>=32-u8g2.getMaxCharHeight()-3){
+                        playersUlti[0]=0;
+                        namePlayersUlti[0]="";
                     }
 
-                }else if ((int)balPosX==5+player1ScoreStrWidth){
-                    player2Score++;
+                }else if ((int)balPos[0]==5+playersScoreStrWidth[0]){
+                    playersScore[1]++;
                     roundFinished=true;
-                }else if ((int)balPosX==123-player2ScoreStrWidth){
-                    player1Score++;
+                }else if ((int)balPos[0]==123-playersScoreStrWidth[1]){
+                    playersScore[0]++;
                     roundFinished=true;
                 }
 
-                if ((int)balPosY==3 || (int)balPosY==29){
+                if ((int)balPos[1]==3 || (int)balPos[1]==29){
                     balAngle=-balAngle;
                     balAngle+=std::to_string(millis())[0] - '0';
                     balSpeed+=0.005;
 
                     if (lastPlayerTouchBal==1){
-                        player1Ulti++;
+                        playersUlti[0]++;
                     }else if (lastPlayerTouchBal==2){
-                        player2Ulti++;
+                        playersUlti[1]++;
                     }
                     lastPlayerTouchBal=0;
 
-                    if ((int)balPosY==3){
-                        balPosY=4;
+                    if ((int)balPos[1]==3){
+                        balPos[1]=4;
                     }else{
-                        balPosY=28;
+                        balPos[1]=28;
                     }
                 }
 
-                updateBallPosition(balPosX, balPosY, balAngle, balSpeed, isSmash, UltiTargetTo, (int)yPlayer1Pos, (int)yPlayer2Pos);
+                updateBallPosition(balPos, balAngle, balSpeed, ultiPlayerSmash, UltiPlayersTarget, yPlayerPos, UltiAllDirections);
 
-                if (balPosX<5+player1ScoreStrWidth){
-                    balPosX=5+player1ScoreStrWidth;
-                }else if (balPosX>123-player2ScoreStrWidth){
-                    balPosX=123-player2ScoreStrWidth;
+                if (balPos[0]<5+playersScoreStrWidth[0]){
+                    balPos[0]=5+playersScoreStrWidth[0];
+                }else if (balPos[0]>123-playersScoreStrWidth[1]){
+                    balPos[0]=123-playersScoreStrWidth[1];
                 }
-                if (balPosY<3){
-                    balPosY=3;
-                }else if (balPosY>29){
-                    balPosY=29;
+                if (balPos[1]<3){
+                    balPos[1]=3;
+                }else if (balPos[1]>29){
+                    balPos[1]=29;
                 }
 
-                u8g2.drawCircle(balPosX,balPosY,3);
+                u8g2.drawCircle(balPos[0],balPos[1],3);
 
 
                 if (touchRead(button1) < 35 && touchRead(button2) < 35){
@@ -1374,9 +1388,9 @@ void pongGame(){
             }
         u8g2.sendBuffer();
         }
-        if (player1Score==roundsWinForFinish){
+        if (playersScore[0]==roundsWinForFinish){
             return;//player 1 win
-        }else if (player2Score==roundsWinForFinish){
+        }else if (playersScore[1]==roundsWinForFinish){
             return;//player 2 win
         }
         delay(500);
@@ -1388,6 +1402,402 @@ void pongGame(){
 
 
 
+struct Obstacle {
+    int x;
+    int y;
+    int type;
+};
+
+// Fonction pour dessiner le joueur
+void drawPlayer(int x, int y) {
+    // Exemple de dessin d'un joueur avec un dinosaure stylisé
+    u8g2.drawBox(x, y, 6, 10); // Corps
+    u8g2.drawBox(x - 2, y + 2, 2, 2); // Tête
+    u8g2.drawBox(x + 6, y + 4, 2, 2); // Queue
+}
+
+// Fonction pour dessiner les obstacles
+void drawObstacle(int x, int y, int type) {
+    switch (type) {
+        case 0:
+            // Exemple de dessin d'un obstacle de type 0
+            u8g2.drawBox(x, y, 10, 10);
+            u8g2.drawLine(x, y, x + 10, y + 10);
+            u8g2.drawLine(x, y + 10, x + 10, y);
+            break;
+        case 1:
+            // Exemple de dessin d'un obstacle de type 1
+            u8g2.drawCircle(x + 5, y + 5, 5, U8G2_DRAW_ALL);
+            break;
+        case 2:
+            // Exemple de dessin d'un obstacle de type 2
+            u8g2.drawTriangle(x, y + 10, x + 5, y, x + 10, y + 10);
+            break;
+    }
+}
+
+void dinoGame() {
+    int dinoPos = 10;
+    String dinoDirection = "";
+    unsigned long lastSpawnTime = 0;
+    unsigned long lastMoveTime = 0;
+    int speed = 20; // Vitesse initiale
+    int score = 0;
+    std::vector<Obstacle> obstacles; // Utilisation de std::vector pour les obstacles
+
+    while (true) {
+        unsigned long currentTime = millis();
+
+        if (currentTime - lastMoveTime > speed) {
+            lastMoveTime = currentTime;
+
+            // Move dinosaur
+            if (dinoPos != 0 && dinoPos != 10 && dinoPos != 20) {
+                if (dinoDirection == "left") {
+                    dinoPos -= 1;
+                } else if (dinoDirection == "right") {
+                    dinoPos += 1;
+                }
+            } else {
+                dinoDirection = "";
+            }
+
+            if (touchRead(button1) < 35) {
+                if (dinoPos != 0) {
+                    dinoDirection = "left";
+                    dinoPos -= 1;
+                }
+            } else if (touchRead(button2) < 35) {
+                if (dinoPos != 20) {
+                    dinoDirection = "right";
+                    dinoPos += 1;
+                }
+            }
+
+            // Move obstacles
+            for (size_t i = 0; i < obstacles.size(); i++) {
+                obstacles[i].x -= 1;
+                if (obstacles[i].x < 0) {
+                    obstacles.erase(obstacles.begin() + i);
+                    i--;
+                    score++;
+                }
+            }
+
+            // Check collision
+            for (size_t i = 0; i < obstacles.size(); i++) {
+                if (obstacles[i].x < 21 && obstacles[i].x > 4 && obstacles[i].y == dinoPos) {
+                    return; // Game over
+                }
+            }
+
+            // Draw everything
+            u8g2.clearBuffer();
+            drawPlayer(15, dinoPos);
+            for (size_t i = 0; i < obstacles.size(); i++) {
+                drawObstacle(obstacles[i].x, obstacles[i].y, obstacles[i].type);
+            }
+            u8g2.setFont(u8g2_font_ncenB08_tr);
+            u8g2.drawStr(0, 10, String(score).c_str());
+            u8g2.sendBuffer();
+        }
+
+        delay(10);
+
+        // Increase difficulty over time by spawning more obstacles more frequently
+        if (currentTime - lastSpawnTime > 1000 - (score * 10)) { // Increase spawn rate with score
+            lastSpawnTime = currentTime;
+            int newY = (rand() % 3) * 10;
+
+            // Ensure there's always a way to dodge
+            bool canSpawn = true;
+            for (size_t i = 0; i < obstacles.size(); i++) {
+                if (obstacles[i].x > 100 && obstacles[i].x < 128 && obstacles[i].y == newY) {
+                    canSpawn = false;
+                    break;
+                }
+            }
+
+            if (canSpawn) {
+                int obstacleType = rand() % 3; // Trois types d'obstacles différents
+                obstacles.push_back({128, newY, obstacleType});
+                if (speed > 2) {
+                    speed -= 2; // Increase difficulty by reducing the speed delay
+                }
+            }
+        }
+    }
+}
+
+
+
+
+void geometryDash(){
+    const int screenWidth = 128;
+    const int screenHeight = 32;
+
+    // Paramètres du jeu
+    const int groundLevel = screenHeight - 5;
+    const int cubeSize = 5;
+    int cubeX = 10;
+    int cubeY = groundLevel - cubeSize;
+    int cubeVelocityY = 0;
+    const int gravity = 1;
+    const int jumpStrength = -7;
+    bool isJumping = false;
+    int cubeRotation = 0;
+
+    const int obstacleWidth = 5;
+    const int spikeHeight = 5;
+    const int maxObstacles = 5;
+    int obstacleX[maxObstacles];
+    int obstacleY[maxObstacles];
+    bool isSpike[maxObstacles];
+
+    // Variables de jeu
+    bool gameRunning = true;
+
+    for (int i = 0; i < maxObstacles; i++) {
+        obstacleX[i] = screenWidth + i * (screenWidth / maxObstacles);
+        obstacleY[i] = groundLevel - obstacleWidth;
+        isSpike[i] = random(2) == 0; // Aléatoirement spike ou bloc
+    }
+
+    while (true){
+        if (gameRunning) {
+            // Logique du cube
+            if (isJumping) {
+            cubeVelocityY += gravity;
+            cubeY += cubeVelocityY;
+
+            // Arrêter de sauter et remettre le cube au niveau du sol
+            if (cubeY >= groundLevel - cubeSize) {
+                cubeY = groundLevel - cubeSize;
+                isJumping = false;
+                cubeVelocityY = 0;
+                cubeRotation = 0;
+            } else {
+                cubeRotation = (cubeRotation + 1) % 4; // Rotation du cube
+            }
+            }
+
+            // Déplacement des obstacles
+            for (int i = 0; i < maxObstacles; i++) {
+            obstacleX[i] -= 2; // Vitesse de l'obstacle
+            if (obstacleX[i] < -obstacleWidth) {
+                obstacleX[i] = screenWidth;
+                obstacleY[i] = groundLevel - (random(3) + 1) * obstacleWidth; // Hauteur aléatoire
+                isSpike[i] = random(2) == 0; // Aléatoirement spike ou bloc
+            }
+
+            // Vérification des collisions
+            if (cubeX < obstacleX[i] + obstacleWidth && cubeX + cubeSize > obstacleX[i] &&
+                cubeY + cubeSize > obstacleY[i] && cubeY < obstacleY[i] + (isSpike[i] ? spikeHeight : obstacleWidth)) {
+                gameRunning = false; // Collision détectée, fin du jeu
+            }
+            }
+
+            // Affichage
+            u8g2.clearBuffer();
+            u8g2.drawFrame(0, 0, screenWidth, screenHeight); // Cadre du jeu
+
+            // Dessiner le cube
+            u8g2.drawBox(cubeX, cubeY, cubeSize, cubeSize); 
+
+            // Dessiner les obstacles
+            for (int i = 0; i < maxObstacles; i++) {
+            if (isSpike[i]) {
+                // Dessiner un pic
+                u8g2.drawTriangle(obstacleX[i], groundLevel, obstacleX[i] + obstacleWidth / 2, groundLevel - spikeHeight, obstacleX[i] + obstacleWidth, groundLevel);
+            } else {
+                // Dessiner un bloc
+                u8g2.drawBox(obstacleX[i], obstacleY[i], obstacleWidth, obstacleWidth);
+            }
+            }
+
+            u8g2.sendBuffer();
+        } else {
+            // Affichage de l'écran de fin
+            u8g2.clearBuffer();
+            u8g2.drawStr(10, 16, "Game Over");
+            u8g2.sendBuffer();
+        }
+
+        // Gérer les entrées
+        if ((touchRead(button1) < 35 || touchRead(button2) < 35) == HIGH && !isJumping) { // Assurez-vous de configurer correctement le bouton
+            isJumping = true;
+            cubeVelocityY = jumpStrength;
+        }
+    }
+}
+
+
+
+
+
+
+
+
+
+
+const int screenWidth = 128;
+const int screenHeight = 32;
+
+
+bool isSafe(int sudoku[][9], int row, int col, int num, int size) {
+  for (int x = 0; x < size; x++) {
+    if (sudoku[row][x] == num || sudoku[x][col] == num) {
+      return false;
+    }
+  }
+  int startRow = row - row % 3, startCol = col - col % 3;
+  for (int i = 0; i < 3; i++) {
+    for (int j = 0; j < 3; j++) {
+      if (sudoku[i + startRow][j + startCol] == num) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+bool solveSudoku(int sudoku[][9], int row, int col, int size) {
+  if (row == size - 1 && col == size) {
+    return true;
+  }
+  if (col == size) {
+    row++;
+    col = 0;
+  }
+  if (sudoku[row][col] != 0) {
+    return solveSudoku(sudoku, row, col + 1, size);
+  }
+  for (int num = 1; num <= size; num++) {
+    if (isSafe(sudoku, row, col, num, size)) {
+      sudoku[row][col] = num;
+      if (solveSudoku(sudoku, row, col + 1, size)) {
+        return true;
+      }
+    }
+    sudoku[row][col] = 0;
+  }
+  return false;
+}
+
+void fillSudoku(int sudoku[][9], int size) {
+  solveSudoku(sudoku, 0, 0, size);
+}
+
+void removeNumbers(int sudoku[][9], int size, int count) {
+  while (count != 0) {
+    int cellId = random(size * size);
+    int row = cellId / size;
+    int col = cellId % size;
+    if (sudoku[row][col] != 0) {
+      sudoku[row][col] = 0;
+      count--;
+    }
+  }
+}
+
+void generateSudoku(int size, int difficulty, int sudoku[][9]) {
+  // Initialiser la grille avec des zéros
+  for (int i = 0; i < size; i++) {
+    for (int j = 0; j < size; j++) {
+      sudoku[i][j] = 0;
+    }
+  }
+
+  // Remplir la grille avec une solution complète
+  fillSudoku(sudoku, size);
+
+  // Appliquer la difficulté en enlevant certains nombres
+  int cellsToRemove = (difficulty == 1) ? (size * size * 2 / 5) : (difficulty == 2) ? (size * size * 3 / 5) : (size * size * 4 / 5);
+  removeNumbers(sudoku, size, cellsToRemove);
+}
+
+
+void displaySudoku(int sudoku[][9], int size) {
+    if (IndexFocused>size){
+        IndexFocused = size;
+    }
+    if (lastIndexFocused!=IndexFocused){
+
+        int cellSize=14;
+
+        int startY = -IndexFocused * cellSize; // Calculer la position de départ en fonction de l'index de défilement
+
+        for (int transition=0; transition<cellSize; transition++){   
+            int transition_=transition;
+            if (IndexFocused<lastIndexFocused){
+                transition_=-transition;
+            }
+
+            u8g2.clearBuffer();
+
+            for (int i = 0; i < size; i++) {
+                for (int j = 0; j < size; j++) {
+                int x = j * cellSize;
+                int y = startY + i * cellSize;
+                    
+                if (sudoku[i][j] != 0) {
+                    char buffer[2];
+                    sprintf(buffer, "%d", sudoku[i][j]);
+                    u8g2.drawStr(x + 5, y + cellSize - 3+transition, buffer); // Ajuster l'espacement du texte dans la cellule
+                }
+                u8g2.drawFrame(x, y+transition, cellSize, cellSize); // Dessiner la bordure de la cellule
+                }
+                
+            }
+            u8g2.sendBuffer();
+        }
+        
+        u8g2.sendBuffer();
+    }
+    lastIndexFocused = IndexFocused;
+}
+
+
+// Variables de défilement
+int scrollX = 0;
+int scrollY = 0;
+
+void sudokuGenerator(){
+    int sudoku[9][9] = {0};
+    int size, difficulty;
+    while (true){
+        std::vector<String> OverviewDifficultyList={ "{\"text\":\"4x4 Easy\"}",
+                                        "{\"text\":\"9x9 Easy\"}",
+                                        "{\"text\":\"9x9 Medium\"}",
+                                        "{\"text\":\"9x9 Hard\"}"
+                                        };
+        showPageOverview(OverviewDifficultyList);
+
+        if (touchRead(button1) < 35 && touchRead(button2) < 35){
+            size = (IndexFocused == 0) ? 4 : 9;
+            difficulty = (IndexFocused == 1) ? 1 : (IndexFocused == 2) ? 2 : 3;
+            break;
+        }
+    }
+    while(touchRead(button1) < 35 || touchRead(button2) < 35){}
+    delay(100); // Simule un délai pour la sélection
+
+    generateSudoku(size, difficulty, sudoku);
+
+
+    IndexFocused=0;
+    // Affichage du Sudoku
+    while (true){
+        displaySudoku(sudoku, size);
+
+        if (touchRead(button1) < 35 && touchRead(button2) < 35){
+            return;
+        }
+    }
+
+
+
+}
 
 
 
@@ -1415,5 +1825,13 @@ void testGame(){
         u8g2.sendBuffer();
 
         delay(1000);
+
+        u8g2.clearBuffer();
+        u8g2.setFont(u8g2_font_cu12_t_symbols);
+        u8g2.drawGlyph(103, 20, 0x219c);
+        u8g2.sendBuffer();
+
+        delay(1000);
+
     }
 }
