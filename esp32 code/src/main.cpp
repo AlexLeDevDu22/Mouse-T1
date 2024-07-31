@@ -756,6 +756,7 @@ void loop() {
                     }
                 }
             }else if (pageName=="In Game"){
+                IndexFocused=0;
                 if (gameChoiced=="Morpion"){
                     morpionGame();
                 }else if (gameChoiced=="Pong") {
@@ -1730,7 +1731,7 @@ void displaySudoku(int sudoku[][9], int size) {
         for (int transition=0; transition<cellSize; transition++){   
             int transition_=transition;
             if (IndexFocused<lastIndexFocused){
-                transition_=-transition;
+                transition_=cellSize-transition;
             }
 
             u8g2.clearBuffer();
