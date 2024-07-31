@@ -19,6 +19,7 @@
 #include <sstream>
 #include <driver/adc.h>
 #include <cmath>
+#include <random>
 
 // Commands
 #define button1 14
@@ -145,6 +146,7 @@ std::vector<String> overviewAskingTypeList={"{\"text\":\"back to menu\"}",
 std::vector<String> OverviewGamesList={ "{\"text\":\"back to menu\"}",
                                         "{\"text\":\"Morpion\"}",
                                         "{\"text\":\"Pong\"}",
+                                        "{\"text\":\"Test Game\"}",
                                         };
 String simpleTextViewText="";
 std::vector<String> OverviewDatasList;
@@ -160,41 +162,44 @@ bool veilleMode=false;
 
 void morpionGame();
 void pongGame();
+void testGame();
 
 void updateIndexFocused(void *pvParameters) {
     while(true){
-        if (touchRead(button1) > 35  || touchRead(button2) > 35){
-            while (touchRead(button1) < 35 && touchRead(button2) > 35) {
-                if (IndexFocused>0){
-                    IndexFocused-=1;
-                    overviewXMoving=0;
+        if (!veilleMode){
+            if (touchRead(button1) > 35  || touchRead(button2) > 35){
+                while (touchRead(button1) < 35 && touchRead(button2) > 35) {
+                    if (IndexFocused>0){
+                        IndexFocused-=1;
+                        overviewXMoving=0;
 
+                        if (pageName=="simple text view"){
+                            delay(500-streakLeftButtonTouched*50);
+                        }else{
+                            delay(600);
+                        }
+                        
+                        if (streakLeftButtonTouched<9){
+                            streakLeftButtonTouched+=1;
+                        }
+                    }
+                }
+                while(touchRead(button1)> 35 && touchRead(button2) < 35){
+                    overviewXMoving=0;
+                    IndexFocused+=1;
                     if (pageName=="simple text view"){
-                        delay(500-streakLeftButtonTouched*30);
+                        delay(500-streakRightButtonTouched*30);
                     }else{
                         delay(600);
                     }
-                    
-                    if (streakLeftButtonTouched<9){
-                        streakLeftButtonTouched+=1;
+                    if (streakRightButtonTouched<9){
+                        streakRightButtonTouched+=1;
                     }
                 }
+                streakLeftButtonTouched=0;
+                streakRightButtonTouched=0;
+                delay(2);
             }
-            while(touchRead(button1)> 35 && touchRead(button2) < 35){
-                overviewXMoving=0;
-                IndexFocused+=1;
-                if (pageName=="simple text view"){
-                    delay(500-streakRightButtonTouched*30);
-                }else{
-                    delay(600);
-                }
-                if (streakRightButtonTouched<9){
-                    streakRightButtonTouched+=1;
-                }
-            }
-            streakLeftButtonTouched=0;
-            streakRightButtonTouched=0;
-            delay(2);
         }
     }
 }
@@ -328,6 +333,7 @@ void showPageText(String text);
 void setup() {
     Wire.begin(SDA_PIN, SCL_PIN);  
     u8g2.begin();
+    u8g2.enableUTF8Print();
     u8g2.setFont(u8g2_font_ncenB08_tr);
 
     Serial.begin(115200);
@@ -562,7 +568,7 @@ void showPageOverview(std::vector<String>& OverviewDatasList) {
             itoa(i+1, oneInt, 10);
             x = strlen(oneInt)*8.5+4;
             if (indexFocused==i){
-                u8g2.drawBox(x, y , u8g2.getStrWidth(bloc["text"])+1, lineHeight);
+                u8g2.drawBox(x, y , u8g2.getStrWidth(bloc["text"])+2, lineHeight);
                 u8g2.setDrawColor(0);
                 if (u8g2.getStrWidth(bloc["text"])>128-x){
                     if (overviewXMoving>=u8g2.getStrWidth(bloc["text"])+40){
@@ -599,7 +605,7 @@ void showPageOverview(std::vector<String>& OverviewDatasList) {
                 u8g2.drawStr(0,lineHeight + y, oneInt);
                 int x = strlen(oneInt)*8.5+4;
                 if (indexFocused==i){
-                    u8g2.drawBox(x, y , u8g2.getStrWidth(bloc["text"])+1, lineHeight);
+                    u8g2.drawBox(x, y , u8g2.getStrWidth(bloc["text"])+2, lineHeight);
                     u8g2.setDrawColor(0);
                 }
                 u8g2.drawStr(x+1,lineHeight + y - 2, bloc["text"]);
@@ -747,6 +753,8 @@ void loop() {
                     morpionGame();
                 }else if (gameChoiced=="Pong") {
                     pongGame();
+                }else if (gameChoiced=="Test Game") {
+                    testGame();
                 }
                 pageName="Games overview";
 
@@ -984,7 +992,33 @@ void morpionGame(){
                             }
                         }
 
-                    } else {
+                    } else{
+
+                        int casesEmpty=0;
+                        for (int i = 0; i<9;i++){
+                            if (tableValues[i] == " "){
+                                casesEmpty++;
+                            }
+                        }
+
+                        if (casesEmpty==0){
+                            while (true){
+
+                                for (int t=300;t>0;t-=40){
+                                    drawTable(48,tableValues,false);
+                                    delay(t);
+                                    u8g2.clearBuffer();
+                                    delay(t);
+                                }
+                                drawTable(48,tableValues,false);
+                                
+                                if (touchRead(button1) < 35 || touchRead(button2) < 35){
+                                    return;
+                                }
+                            }
+                        }
+
+
                         //animation for change side of table
                         for (int i = 1; i<96; i++){
                             if (player1Play){
@@ -993,32 +1027,10 @@ void morpionGame(){
                             }else{
                                 drawTable(xOffset-i,tableValues,true);
                             }
-                            delay(1);
                         }
                         player1Play=!player1Play;
                     }
                }
-            }
-            int casesEmpty=0;
-            for (int i = 0; i<9;i++){
-                if (tableValues[i] == " "){
-                    casesEmpty++;
-                }
-            }
-            if (casesEmpty==0){
-                while (true){
-
-                    for (int t=300;t>0;t-=40){
-                        drawTable(48,tableValues,false);
-                        delay(t);
-                        u8g2.clearBuffer();
-                        delay(t);
-                    }
-                    
-                    if (touchRead(button1) < 35 || touchRead(button2) < 35){
-                        return;
-                    }
-                }
             }
         }else{
             u8g2.clearBuffer();
@@ -1029,105 +1041,323 @@ void morpionGame(){
 }
 
 
-void updateBallPosition(float& balPosX, float& balPosY, int balAngle) {
-        // Convert angle to radians
-        float radians = balAngle * 3.14159265 / 180.0;
-        
-        // Calculate the change in position
-        float deltaX = cos(radians);
-        float deltaY = sin(radians);
-        
-        // Update ball position
-        balPosX += deltaX*balSpeed;
-        balPosY += deltaY*balSpeed;
+void updateBallPosition(float& balPosX, float& balPosY, int balAngle, float balSpeed, bool isSmash, int UltiTargetTo,int yPlayer1Pos, int yPlayer2Pos) {
+
+    // Convert angle to radians
+    float radians = balAngle * 3.14159265 / 180.0;
+    
+    // Calculate the change in position
+    float deltaX = cos(radians);
+    float deltaY = sin(radians);
+
+    if (isSmash){
+        balSpeed += 0.5;
     }
+        
+    // Update ball position
+    balPosX += deltaX*balSpeed;
+    balPosY += deltaY*balSpeed;
+
+    if(UltiTargetTo==1 && balPosX>64 ) {
+        balPosY=yPlayer1Pos+22;
+        if (balPosY>31){
+            balPosY=balPosY-32;
+        }
+    }else if(UltiTargetTo==2 && balPosX<64 ){
+        balPosY=yPlayer2Pos+22;
+        if (balPosY>31){
+            balPosY=balPosY-32;
+        }
+    }
+}
+
+std::string getRandomUlti() {
+
+    const std::vector<std::string> vec = {"Smash", "Slow", "Target", "Narrowing"};
+
+    Serial.println(vec[millis()%vec.size()].c_str());
+    return vec[millis()%vec.size()];
+}
 
 void pongGame(){
     
     
     int player1Score=0;
     int player2Score=0;
-    
-	int yPlayer1Pos=0;
-	int yPlayer2Pos=0;
 
     float player1Ulti=0;
-    float player2Ulti=0;
+    std::string namePlayer1Ulti="";
 
-    float balPosX = 64;
-    float balPosY = 16;
-    int balAngle = std::to_string(millis())[0] - '0';
-    float balSpeed=1;
+    float player2Ulti=0;
+    std::string namePlayer2Ulti="";
+
+    int roundsWinForFinish;
+
+    while (true){
+        if (!veilleMode){
+            u8g2.clearBuffer();
+
+            u8g2.drawStr(20,u8g2.getMaxCharHeight(), "nombre de manche a gagner");
+
+            char roundsWinForFinishStr[10];
+            itoa(IndexFocused, roundsWinForFinishStr, 10);
+            u8g2.drawStr(20,20, roundsWinForFinishStr);
+
+            if (touchRead(button1) < 35 && touchRead(button1) < 35 && IndexFocused>0){
+                roundsWinForFinish=IndexFocused;
+                while (touchRead(button1) < 35 || touchRead(button2) < 35){}
+                break;
+            }
+
+            u8g2.sendBuffer();
+        }else{
+            u8g2.clearBuffer();
+            u8g2.sendBuffer();
+        }
+    }
 
 	while (true){//rounds
-        player1Ulti=0;
-        player2Ulti=0;
-        balSpeed=1;
-        delay(1000);
+        float yPlayer1Pos=0;
+	    float yPlayer2Pos=0;
+
+        int balAngle = std::to_string(millis())[0] - '0';
+        float balSpeed=1;
+        float balPosX = 64;
+        float balPosY = 16;
+
+        int lastPlayerTouchBal=0;
+
+        bool roundFinished=false;
+
+        //Ulti vars
+        bool isSmash=false;
+
+        int ultiPlayerSlowed=0;
+
+        int UltiTargetTo=0;
+
+        int player1Height=12;
+        int player2Height=12;
+
         while (true){
             u8g2.clearBuffer();
-            if (!veilleMode){
+            //if (!veilleMode){
+
+
+                if (player1Ulti>=32-u8g2.getMaxCharHeight()-3){
+                    if (namePlayer1Ulti==""){
+                        namePlayer1Ulti=getRandomUlti();
+                    }
+
+                    if (namePlayer1Ulti=="Smash"){
+                        isSmash=true;
+                        u8g2.setFont(u8g2_font_twelvedings_t_all);
+                        u8g2.drawGlyph(10, 20, 41);
+                    }else if (namePlayer1Ulti=="Slow"){
+                        ultiPlayerSlowed=2;
+                        u8g2.setFont(u8g2_font_twelvedings_t_all);
+                        u8g2.drawGlyph(10, 20, 0x0067);
+                    }else if (namePlayer1Ulti=="Target"){
+                        UltiTargetTo=2;
+                        u8g2.setFont(u8g2_font_unifont_t_86);
+                        u8g2.drawGlyph(10, 20, 0x2b59);
+                    }else if (namePlayer1Ulti=="Narrowing"){
+                        player2Height=7;
+                        u8g2.setFont(u8g2_font_unifont_t_symbols);
+                        u8g2.drawGlyph(10, 20, 0x21d4);
+                    }
+                    u8g2.setFont(u8g2_font_ncenB08_tr);
+
+                    
+                    if (namePlayer1Ulti!="Smash"){
+                        isSmash=false;
+                    }
+                    if (namePlayer1Ulti!="Slow"){
+                        ultiPlayerSlowed=0;
+                    }
+                    if (namePlayer1Ulti!="Target"){
+                        UltiTargetTo=0;
+                    }
+                    if (namePlayer1Ulti!="Narrowing"){
+                        player2Height=12;
+                    }
+                }
+
+                if (player2Ulti>=32-u8g2.getMaxCharHeight()-3){
+
+                    if (namePlayer2Ulti==""){
+                        namePlayer2Ulti=getRandomUlti();
+                    }
+                    
+                    if (namePlayer2Ulti=="Smash"){
+                        isSmash=true;
+                        u8g2.setFont(u8g2_font_twelvedings_t_all);
+                        u8g2.drawGlyph(103, 20, 40);
+                    }else if (namePlayer2Ulti=="Slow"){
+                        ultiPlayerSlowed=1;
+                        u8g2.setFont(u8g2_font_twelvedings_t_all);
+                        u8g2.drawGlyph(103, 20, 0x0067);
+                    }else if (namePlayer2Ulti=="Target"){
+                        UltiTargetTo=1;
+                        u8g2.setFont(u8g2_font_unifont_t_86);
+                        u8g2.drawGlyph(103, 20, 0x2b59);
+                    }else if (namePlayer2Ulti=="Narrowing"){
+                        player1Height=7;
+                        u8g2.setFont(u8g2_font_8x13_t_symbols);
+                        u8g2.drawGlyph(103, 20, 0x2195);
+                    }
+
+                    u8g2.setFont(u8g2_font_ncenB08_tr);
+
+                    
+                    if (namePlayer2Ulti!="Smash"){
+                        isSmash=false;
+                    }
+                    if (namePlayer2Ulti!="Slow"){
+                        ultiPlayerSlowed=0;
+                    }
+                    if (namePlayer2Ulti!="Target"){
+                        UltiTargetTo=0;
+                    }
+                    if (namePlayer1Ulti!="Narrowing"){
+                        player1Height=12;
+                    }
+                }
                         
                         
                 if (touchRead(button1)<35){
-                    if (yPlayer1Pos<22){
-                    yPlayer1Pos+=2;
+                    if (ultiPlayerSlowed!=1){
+                        yPlayer1Pos+=1;
+                    }else{
+                        yPlayer1Pos+=0.5;
                     }
-                }else if (yPlayer1Pos>1){
-                    yPlayer1Pos-=2;
+                    if (yPlayer1Pos>=32){
+                        yPlayer1Pos=0;
+                    }
                 }
-                
                 if (touchRead(button2)<35){
-                    if (yPlayer2Pos<22){
-                    yPlayer2Pos+=2;
+                    if (ultiPlayerSlowed!=2){
+                        yPlayer2Pos+=1;
+                    }else{
+                        yPlayer2Pos+=0.5;
                     }
-                }else if (yPlayer2Pos>1){
-                    yPlayer2Pos-=2;
+                    if (yPlayer2Pos>=32){
+                        yPlayer2Pos=0;
+                    }
                 }
 
+                char player1ScoreStr[10];
+                itoa(player1Score, player1ScoreStr, 10);
+                int player1ScoreStrWidth = u8g2.getStrWidth(player1ScoreStr);
 
-                u8g2.drawBox(0,yPlayer1Pos,2,12);
-                u8g2.drawBox(126,yPlayer2Pos,2,12);
+                char player2ScoreStr[10];
+                itoa(player2Score, player2ScoreStr, 10);
+                int player2ScoreStrWidth = u8g2.getStrWidth(player2ScoreStr);
 
-                //TODO u8g2.drawStr(0,10,player1Score);
-                //u8g2.drawStr(120,10,player2Score);
+                if (roundsWinForFinish>1){
 
+                    u8g2.drawStr(0,u8g2.getMaxCharHeight(),player1ScoreStr);
+                    u8g2.drawStr(128-player2ScoreStrWidth,u8g2.getMaxCharHeight(),player2ScoreStr);
+
+                }
+                u8g2.drawBox(player1ScoreStrWidth+2,(int)yPlayer1Pos,2,player1Height);
+                if (yPlayer1Pos>32-player1Height){
+                    u8g2.drawBox(player1ScoreStrWidth+2,0,2,player1Height-(32-(int)yPlayer1Pos));
+                }
+
+                u8g2.drawBox(128-player2ScoreStrWidth-4,(int)yPlayer2Pos,2,player2Height);
+                if (yPlayer2Pos>32-player2Height){
+                    u8g2.drawBox(128-player2ScoreStrWidth-4,0,2,player2Height-(32-(int)yPlayer2Pos));
+                }
 
                 for (int i=0;i<16;i++){
-                    u8g2.drawLine(i*8,0,i*8+4,0);
-                    u8g2.drawLine(4+i*8,31,i*8+8,31);
+                    u8g2.drawLine(i*8+player1ScoreStrWidth,0,i*8+4+player1ScoreStrWidth,0);
+                    u8g2.drawLine(4+i*8+player1ScoreStrWidth,31,i*8+8+player1ScoreStrWidth,31);
+                }
+            
+                u8g2.drawLine(0,u8g2.getMaxCharHeight()+1,player1ScoreStrWidth,u8g2.getMaxCharHeight()+1);
+                if (player1Ulti<32-u8g2.getMaxCharHeight()-3){
+                    u8g2.drawBox(0,31-player1Ulti,3,32);
+                    u8g2.drawBox(1,31-player1Ulti-1,1,1);
                 }
 
-                if  ((int)balPosX==5 && yPlayer1Pos-2<=(int)balPosY<=yPlayer1Pos+14){
+                u8g2.drawLine(128-player2ScoreStrWidth,u8g2.getMaxCharHeight()+1,128,u8g2.getMaxCharHeight()+1);
+                if (player2Ulti<32-u8g2.getMaxCharHeight()-3){
+                    u8g2.drawBox(125,31-player2Ulti,3,32);
+                    u8g2.drawBox(126,31-player2Ulti-1,1,1);
+                }
+
+                if  ((int)balPosX==5+player1ScoreStrWidth && (((int)yPlayer1Pos-3<=(int)balPosY && (int)balPosY<=(int)yPlayer1Pos+player1Height+3) ||  balPosY<=(int)yPlayer1Pos-(32-player1Height) )){
+
                     balAngle=270+270-balAngle;
                     balAngle+=std::to_string(millis())[0] - '0';
-                }else if ((int)balPosX==123 && yPlayer2Pos-2<=(int)balPosY<=yPlayer2Pos+14){
+                    balPosX=6+player1ScoreStrWidth;
+
+                    lastPlayerTouchBal=1;
+
+                    if (player1Ulti<32-u8g2.getMaxCharHeight()-2){
+                        player1Ulti+=2;
+                    }
+
+                    if (player2Ulti>=32-u8g2.getMaxCharHeight()-3){
+                        player2Ulti=0;
+                        namePlayer2Ulti="";
+                    }
+
+                }else if ((int)balPosX==123-player2ScoreStrWidth && (((int)yPlayer2Pos-3<=(int)balPosY && (int)balPosY<=(int)yPlayer2Pos+player2Height+3) || balPosY<=(int)yPlayer2Pos-(32-player1Height))){
                     balAngle=90+90-balAngle;
                     balAngle+=std::to_string(millis())[0] - '0';
-                }else if ((int)balPosX==5){
-                    //TODO new round player 1 lose
-                }else if ((int)balPosX==123){
-                    //TODO new round player 2 lose
+                    lastPlayerTouchBal=2;
+                    balPosX=122-player2ScoreStrWidth;
+
+                    if (player2Ulti<32-u8g2.getMaxCharHeight()-2){
+                        player2Ulti+=2;
+                    }
+
+                    if (player1Ulti>=32-u8g2.getMaxCharHeight()-3){
+                        player1Ulti=0;
+                        namePlayer1Ulti="";
+                    }
+
+                }else if ((int)balPosX==5+player1ScoreStrWidth){
+                    player2Score++;
+                    roundFinished=true;
+                }else if ((int)balPosX==123-player2ScoreStrWidth){
+                    player1Score++;
+                    roundFinished=true;
                 }
 
                 if ((int)balPosY==3 || (int)balPosY==29){
                     balAngle=-balAngle;
                     balAngle+=std::to_string(millis())[0] - '0';
+                    balSpeed+=0.005;
+
+                    if (lastPlayerTouchBal==1){
+                        player1Ulti++;
+                    }else if (lastPlayerTouchBal==2){
+                        player2Ulti++;
+                    }
+                    lastPlayerTouchBal=0;
+
+                    if ((int)balPosY==3){
+                        balPosY=4;
+                    }else{
+                        balPosY=28;
+                    }
                 }
 
-                if (balPosX<5){
-                    balPosX=5;
-                }else if (balPosX>123){
-                    balPosX=123;
+                updateBallPosition(balPosX, balPosY, balAngle, balSpeed, isSmash, UltiTargetTo, (int)yPlayer1Pos, (int)yPlayer2Pos);
+
+                if (balPosX<5+player1ScoreStrWidth){
+                    balPosX=5+player1ScoreStrWidth;
+                }else if (balPosX>123-player2ScoreStrWidth){
+                    balPosX=123-player2ScoreStrWidth;
                 }
                 if (balPosY<3){
                     balPosY=3;
                 }else if (balPosY>29){
                     balPosY=29;
                 }
-
-                updateBallPosition(balPosX, balPosY, balAngle);
-
 
                 u8g2.drawCircle(balPosX,balPosY,3);
 
@@ -1138,8 +1368,52 @@ void pongGame(){
                         return;
                     }
                 }
+            //}
+            if (roundFinished){
+                break;
             }
         u8g2.sendBuffer();
         }
+        if (player1Score==roundsWinForFinish){
+            return;//player 1 win
+        }else if (player2Score==roundsWinForFinish){
+            return;//player 2 win
+        }
+        delay(500);
+    }
+}
+
+
+
+
+
+
+
+
+
+
+void testGame(){
+    while (true){
+        u8g2.clearBuffer();
+
+        u8g2.setFont(u8g2_font_twelvedings_t_all);
+        u8g2.drawGlyph(105, 20, 40);
+        u8g2.sendBuffer();
+
+        delay(1000);
+
+        u8g2.clearBuffer();
+        u8g2.setFont(u8g2_font_twelvedings_t_all);
+        u8g2.drawGlyph(105, 20, 0x0067);
+        u8g2.sendBuffer();
+
+        delay(1000);
+
+        u8g2.clearBuffer();
+        u8g2.setFont(u8g2_font_unifont_t_86);
+        u8g2.drawGlyph(105, 20, 0x2b59);
+        u8g2.sendBuffer();
+
+        delay(1000);
     }
 }
