@@ -1057,9 +1057,9 @@ void morpionGame(){
 
 void updateBallPosition(std::vector<float>& balPos, int balAngle, float balSpeed, std::vector<bool> isSmash, std::vector<bool> UltiPlayersTarget,std::vector<float> yPlayerPos, std::vector<bool> UltiAllDirections) {
 
-    if (UltiAllDirections[0]){
+    if (UltiAllDirections[0] && (int)(balPos[0])%5==0){
         balAngle=millis()%90+135;
-    }else if (UltiAllDirections[1]){
+    }else if (UltiAllDirections[1] && (int)(balPos[0])%5==0){
         balAngle=millis()%180-45;
     }
 
@@ -1112,7 +1112,7 @@ void pongGame(){
         if (!veilleMode){
             u8g2.clearBuffer();
 
-            u8g2.drawStr(20,u8g2.getMaxCharHeight(), "nombres de manches gagnantes");
+            u8g2.drawStr(20,u8g2.getMaxCharHeight(), "Manches gagnantes");
 
             char roundsWinForFinishStr[10];
             itoa(IndexFocused, roundsWinForFinishStr, 10);
@@ -1149,7 +1149,7 @@ void pongGame(){
 
         std::vector<bool>  UltiPlayersTarget={false,false};
 
-        std::vector<int> playersHeight={12,12};
+        std::vector<int> playersHeight={0,0};
 
         std::vector<bool> UltiAllDirections={false, false};
 
@@ -1182,7 +1182,7 @@ void pongGame(){
                     }else if (namePlayersUlti[0]=="All Directions"){
                         UltiAllDirections[0]=true;
                         u8g2.setFont(u8g2_font_cu12_t_symbols);
-                        u8g2.drawGlyph(103, 20, 0x219b);
+                        u8g2.drawGlyph(10, 20, 0x219b);
                     }
 
                     u8g2.setFont(u8g2_font_ncenB08_tr);
@@ -1555,9 +1555,6 @@ void geometryDash(){
     int obstacleY[maxObstacles];
     bool isSpike[maxObstacles];
 
-    // Variables de jeu
-    bool gameRunning = true;
-
     for (int i = 0; i < maxObstacles; i++) {
         obstacleX[i] = screenWidth + i * (screenWidth / maxObstacles);
         obstacleY[i] = groundLevel - obstacleWidth;
@@ -1565,7 +1562,6 @@ void geometryDash(){
     }
 
     while (true){
-        if (gameRunning) {
             // Logique du cube
             if (isJumping) {
             cubeVelocityY += gravity;
@@ -1594,7 +1590,7 @@ void geometryDash(){
             // Vérification des collisions
             if (cubeX < obstacleX[i] + obstacleWidth && cubeX + cubeSize > obstacleX[i] &&
                 cubeY + cubeSize > obstacleY[i] && cubeY < obstacleY[i] + (isSpike[i] ? spikeHeight : obstacleWidth)) {
-                gameRunning = false; // Collision détectée, fin du jeu
+                return;
             }
             }
 
@@ -1617,12 +1613,7 @@ void geometryDash(){
             }
 
             u8g2.sendBuffer();
-        } else {
-            // Affichage de l'écran de fin
-            u8g2.clearBuffer();
-            u8g2.drawStr(10, 16, "Game Over");
-            u8g2.sendBuffer();
-        }
+        
 
         // Gérer les entrées
         if ((touchRead(button1) < 35 || touchRead(button2) < 35) == HIGH && !isJumping) { // Assurez-vous de configurer correctement le bouton
@@ -1722,39 +1713,43 @@ void displaySudoku(int sudoku[][9], int size) {
     if (IndexFocused>size){
         IndexFocused = size;
     }
-    if (lastIndexFocused!=IndexFocused){
+    
 
-        int cellSize=14;
+    int cellSize=14;
 
-        int startY = -IndexFocused * cellSize; // Calculer la position de départ en fonction de l'index de défilement
+    int startY = -lastIndexFocused * cellSize; // Calculer la position de départ en fonction de l'index de défilement
 
-        for (int transition=0; transition<cellSize; transition++){   
-            int transition_=transition;
-            if (IndexFocused<lastIndexFocused){
-                transition_=cellSize-transition;
-            }
-
-            u8g2.clearBuffer();
-
-            for (int i = 0; i < size; i++) {
-                for (int j = 0; j < size; j++) {
-                int x = j * cellSize;
-                int y = startY + i * cellSize;
-                    
-                if (sudoku[i][j] != 0) {
-                    char buffer[2];
-                    sprintf(buffer, "%d", sudoku[i][j]);
-                    u8g2.drawStr(x + 5, y + cellSize - 3+transition, buffer); // Ajuster l'espacement du texte dans la cellule
-                }
-                u8g2.drawFrame(x, y+transition, cellSize, cellSize); // Dessiner la bordure de la cellule
-                }
-                
-            }
-            u8g2.sendBuffer();
+    for (int transition=0; transition<cellSize; transition++){   
+        int transition_=transition;
+        if (IndexFocused>lastIndexFocused){
+            transition_=-transition;
         }
-        
+
+        u8g2.clearBuffer();
+
+        for (int i = 0; i < size; i++) {
+            for (int j = 0; j < size; j++) {
+            int x = j * cellSize;
+            int y = startY + i * cellSize;
+                
+            if (sudoku[i][j] != 0) {
+                char buffer[2];
+                sprintf(buffer, "%d", sudoku[i][j]);
+                u8g2.drawStr(x + 5, y + cellSize - 3+transition_, buffer); // Ajuster l'espacement du texte dans la cellule
+            }
+            u8g2.drawFrame(x, y+transition_, cellSize, cellSize); // Dessiner la bordure de la cellule
+            }
+            
+        }
         u8g2.sendBuffer();
+
+        if (lastIndexFocused==IndexFocused){
+            return;
+        }
     }
+    
+    u8g2.sendBuffer();
+    
     lastIndexFocused = IndexFocused;
 }
 
@@ -1767,21 +1762,24 @@ void sudokuGenerator(){
     int sudoku[9][9] = {0};
     int size, difficulty;
     while (true){
-        std::vector<String> OverviewDifficultyList={ "{\"text\":\"4x4 Easy\"}",
-                                        "{\"text\":\"9x9 Easy\"}",
-                                        "{\"text\":\"9x9 Medium\"}",
-                                        "{\"text\":\"9x9 Hard\"}"
-                                        };
+        std::vector<String> OverviewDifficultyList={
+                                                    "{\"text\":\"9x9 Easy\"}",
+                                                    "{\"text\":\"9x9 Medium\"}",
+                                                    "{\"text\":\"9x9 Hard\"}"
+                                                    };
         showPageOverview(OverviewDifficultyList);
 
         if (touchRead(button1) < 35 && touchRead(button2) < 35){
-            size = (IndexFocused == 0) ? 4 : 9;
-            difficulty = (IndexFocused == 1) ? 1 : (IndexFocused == 2) ? 2 : 3;
+            size = 9;
+            difficulty = (IndexFocused == 0) ? 1 : (IndexFocused == 1) ? 2 : 3;
             break;
         }
     }
     while(touchRead(button1) < 35 || touchRead(button2) < 35){}
-    delay(100); // Simule un délai pour la sélection
+
+    u8g2.clearBuffer();
+    u8g2.drawStr(10,20,"waiting generation...");
+    u8g2.sendBuffer();
 
     generateSudoku(size, difficulty, sudoku);
 
