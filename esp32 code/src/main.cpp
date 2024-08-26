@@ -506,4 +506,5 @@ void loop() {
     u8g2.drawStr(20, 40, (totalTeamsScores[0] > totalTeamsScores[1]) ? "Team 1 Wins!" : "Team 2 Wins!");
     u8g2.sendBuffer();
     delay(5000);
+    
 }
