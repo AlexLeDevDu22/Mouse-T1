@@ -162,9 +162,10 @@ int getHexCodeForCard(const Card& card) {
     return -1; // En cas d'erreur, retourner -1
 }
 
-void displayCard(Card card, int x, int y) {
+void displayCard(Card card, int x, int y, bool hidden=false) {
     u8g2.setFont(u8g2_font_unifont_t_cards);
-    u8g2.drawGlyph(x, y, getHexCodeForCard(card) );
+    if (!hidden)  u8g2.drawGlyph(x, y, getHexCodeForCard(card) );
+    else u8g2.drawGlyph(x, y, 0x20 );
     u8g2.setFont(u8g2_font_ncenB08_tr);
     //char buffer[20];
     //sprintf(buffer, "%s %s", card.colors.c_str(), card.name.c_str());
@@ -173,13 +174,41 @@ void displayCard(Card card, int x, int y) {
 
 std::vector < std::vector < Card >> playersDecks(4);
 
-void displayDeck(int numDeck){
+void displayDeck(int numDeck, bool showCurrent){
     std::vector < Card > deck = playersDecks[numDeck];
 
+    if (IndexFocused>deck.size()-1) IndexFocused=deck.size()-1;
     for (int i = 0; i < deck.size(); i++){
-        displayCard(deck[i], 64-deck.size()*7+i*14, 32);
+        if (showCurrent && IndexFocused==i){
+
+            u8g2.setDrawColor(0);
+            displayCard(deck[i], 64-deck.size()*7+i*14, 28);
+            u8g2.setDrawColor(1);
+        }
+        else  
+            displayCard(deck[i], 64-deck.size()*7+i*14, 32);
     }
 }
+
+std::vector<std::vector<int>> calculateTrajectory(std::vector<int> start, std::vector<int> end, int steps) {
+    std::vector<std::vector<int>> trajectory;
+    
+    for (int i = 0; i <= steps; ++i) {
+        float ratio = static_cast<float>(i) / steps;
+        Serial.println(start[0]);
+        Serial.println(start[1]);
+        Serial.println(end[0]);
+        Serial.println(end[1]);
+
+        std::vector<int> current = {(int)(start[0] + (end[0] - start[0]) * ratio) , (int)( start[1] + (end[1] - start[1]) * ratio)};
+
+        trajectory.push_back(current);
+    }
+    
+    return trajectory;
+}
+
+
 
 void setup() {
     Wire.begin(SDA_PIN, SCL_PIN);
@@ -220,8 +249,10 @@ void loop() {
         0,
         0
     };
+    std::vector<std::vector<int>> posPlayers = {{60,35},{-5,18},{60, 8},{120,18}};
+
     while (true) { //each rounds
-        int firstPlayerPlay = millis() % 4; // Changement de 3 à 4 pour inclure 4 joueurs
+        int firstPlayerPlay = millis() % 4;
         std::string currentAtout = "";
         int teamsTaked;
         int numberBeloteSaid = 0;
@@ -233,19 +264,56 @@ void loop() {
             cardsGame = generateRandomGame();
 
             dealtsCards = 0;
-            for (int player = 0; player < 4; player++) { // Distribution pour chaque joueur
-                playersDecks[player].clear();
-                for (int i = 0; i < 5; i++) { // Ajout de 5 cartes
-                    playersDecks[player].push_back(cardsGame[dealtsCards]);
-                    if (player == 0) {
+            for (int tour = firstPlayerPlay; tour < firstPlayerPlay+8; tour++) { // Distribution pour chaque joueur
+                int currentPlayer=tour%4;
+
+                if (tour<=3) playersDecks[currentPlayer].clear();
+
+                for (int i = 0; i < 3; i++) { // Ajout de 3 ou 2 cartes
+
+                    if (tour>3 && i==2) continue;// for pass 3 and 2 times
+                
+                    std::vector<int> endAnimation;
+                    if (currentPlayer == 0) endAnimation={64-playersDecks[currentPlayer].size()*7+playersDecks[currentPlayer].size()*14, 32};
+                    else endAnimation=posPlayers[currentPlayer];
+
+                    std::vector<std::vector<int>> positions = calculateTrajectory(posPlayers[firstPlayerPlay-1%4], endAnimation, 10);
+
+                    for (const auto& pos : positions) {
                         u8g2.clearBuffer();
-                        displayDeck(player);
+                        displayDeck(0, false);
+
+                        for (int p=0; p<4; p++){
+                            if ((playersDecks[p].size()>0  || p==firstPlayerPlay-1%4) && p!=0) displayCard(cardsGame[dealtsCards], posPlayers[p][0], posPlayers[p][1], true);
+                        }
+
+                        displayCard(cardsGame[dealtsCards], pos[0], pos[1], true);
                         u8g2.sendBuffer();
-                        delay(500);
+                        delay(60);
                     }
+
+                    playersDecks[currentPlayer].push_back(cardsGame[dealtsCards]);
+
                     dealtsCards++;
                 }
             }
+
+            std::vector<std::vector<int>> positions = calculateTrajectory(posPlayers[firstPlayerPlay-1%4], {38, 15}, 10);
+
+            for (const auto& pos : positions){
+                u8g2.clearBuffer();
+                displayDeck(0, false);
+
+                for (int p=0; p<4; p++){
+                    if (p!=0) displayCard(cardsGame[dealtsCards], posPlayers[p][0], posPlayers[p][1], true);
+                }
+
+                displayCard(cardsGame[dealtsCards], pos[0], pos[1], true);
+                u8g2.sendBuffer();
+                delay(60);
+            }
+
+
             bool isTake = false;
 
             int lastPlayerTaked;
@@ -276,7 +344,7 @@ void loop() {
                                     u8g2.drawStr(90, 11, "Yes");
                                 }
                                 u8g2.setDrawColor(1);
-                                displayDeck(currentPlayer);
+                                displayDeck(currentPlayer, false);
                                 u8g2.sendBuffer();
 
                                 if (touchRead(button1) < 35 && touchRead(button2) < 35) { //if click
@@ -304,7 +372,7 @@ void loop() {
                                                     }
                                                     u8g2.setDrawColor(1);
                                                 }
-                                                displayDeck(currentPlayer);
+                                                displayDeck(currentPlayer, false);
                                                 u8g2.sendBuffer();
                                                 delay(10);
                                                 if (touchRead(button1) < 35 && touchRead(button2) < 35) break; //if confirm color or cancel
@@ -356,7 +424,7 @@ void loop() {
         }
         u8g2.clearBuffer();
         std::string message;
-        if (teamsTaked==1) message = "Vous avez pris à " + currentAtout;
+        if (teamsTaked==0) message = "Vous avez pris à " + currentAtout;
         else message = "L'adversaire à pris à " + currentAtout;
         u8g2.drawStr(20, 12, message.c_str());
 
@@ -364,15 +432,33 @@ void loop() {
         u8g2.sendBuffer();
         delay(1000);
 
-        for (int player = 0; player < 4; player++) { // Distribution du reste des cartes
-            while (playersDecks[player].size() < 8) {
-                playersDecks[player].push_back(cardsGame[dealtsCards]);
-                if (player == 0) {
-                    u8g2.clearBuffer();
-                    displayDeck(player);
-                    u8g2.sendBuffer();
-                    delay(500);
-                }
+        for (int player = firstPlayerPlay; player < firstPlayerPlay+4; player++) { // Distribution du reste des cartes
+            int currentPlayer = player%4;
+
+            while (playersDecks[currentPlayer].size() < 8) {
+
+                std::vector<int> endAnimation;
+                    if (currentPlayer == 0) endAnimation={64-playersDecks[currentPlayer].size()*7+playersDecks[currentPlayer].size()*14, 32};
+                    else endAnimation=posPlayers[currentPlayer];
+
+                    std::vector<std::vector<int>> positions = calculateTrajectory(posPlayers[firstPlayerPlay-1%4], endAnimation, 10);
+
+                    for (const auto& pos : positions) {
+                        u8g2.clearBuffer();
+                        displayDeck(0, false);
+
+                        for (int p=0; p<4; p++){
+                            if ((playersDecks[p].size()>0  || p==firstPlayerPlay-1%4) && p!=0) displayCard(cardsGame[dealtsCards], posPlayers[p][0], posPlayers[p][1], true);
+                        }
+
+                        displayCard(cardsGame[dealtsCards], pos[0], pos[1], true);
+                        u8g2.sendBuffer();
+                        delay(60);
+                    }
+
+
+                playersDecks[currentPlayer].push_back(cardsGame[dealtsCards]);
+
                 dealtsCards++;
             }
         }
@@ -391,23 +477,26 @@ void loop() {
             0,
             0
         };
+        int lastWinIndex;
         for (int split = 1; split <= 8; split++) { // Chaque pli dans le round
-            std::vector < int > pliTeamsScores = {
-                0,
-                0
-            };
+            int pliScores = 0;
             std::vector < Card > cardsPlaced = {};
-            for (int player = firstPlayerPlay; player < firstPlayerPlay + 4; player++) { // pour chaque joueur
+            delay(1000);
+
+            int startPlayer;
+            if (split==1) startPlayer=firstPlayerPlay;
+            else startPlayer=lastWinIndex;
+            for (int player = startPlayer; player < startPlayer + 4; player++) { // pour chaque joueur
                 int currentPlayer = player % 4;
                 if (currentPlayer == 0) { // Si c'est le joueur réel qui doit jouer
                     bool playerPlayed = false;
                     while (!playerPlayed) {
                         // Affichage du deck et de la carte sur la table
                         u8g2.clearBuffer();
-                        displayDeck(currentPlayer);
                         for (size_t i = 0; i < cardsPlaced.size(); i++) {
-                            displayCard(cardsPlaced[i], 60+ i * 14);
+                            displayCard(cardsPlaced[i], 34 + i * 14, 15);
                         }
+                        displayDeck(currentPlayer, true);
                         u8g2.sendBuffer();
 
                         if (touchRead(button1) < 35 && touchRead(button2) < 35) { // Si le joueur a choisi sa carte
@@ -415,9 +504,10 @@ void loop() {
                             int timeClicked = 0;
                             while (touchRead(button1) < 35 && touchRead(button2) < 35) {
                                 timeClicked++;
+                                delay(1);
                             }
-                            if (timeClicked > 20000) { // si long click
-                                if (playersDecks[0][cardSelected].name == "Valet" || playersDecks[0][cardSelected].name == "Dame") {
+                            if (timeClicked > 2000) { // si long click
+                                if (playersDecks[0][cardSelected].name == "Roi" || playersDecks[0][cardSelected].name == "Dame") {
                                     numberBeloteSaid++;
                                     beloteTeam = currentPlayer % 2;
                                 } else {
@@ -447,24 +537,100 @@ void loop() {
                         playersDecks[currentPlayer].erase(playersDecks[currentPlayer].begin());
                     }
                 }
-                // Animation pour placer la carte
+
+                std::vector<int> posAnimatedCard;
+
+                if (currentPlayer == 0) posAnimatedCard={64-playersDecks[currentPlayer].size()*7+IndexFocused*14, 28};
+                else posAnimatedCard=posPlayers[currentPlayer];
+
+
+                std::vector<std::vector<int>> positions = calculateTrajectory(posAnimatedCard, {34 + (cardsPlaced.size()-1) * 14 , 15}, 10);
+
+                for (const auto& pos : positions) {
+                    u8g2.clearBuffer();
+                    for (size_t i = 0; i < cardsPlaced.size()-1; i++) {
+                        displayCard(cardsPlaced[i], 34 + i * 14, 15);
+                    }
+                    if (currentPlayer == 0) {
+                        displayDeck(0, false);
+                    } else {
+                        displayDeck(0, true);
+                    }
+
+                    displayCard(cardsPlaced.back(), pos[0], pos[1]);
+                    u8g2.sendBuffer();
+
+                    delay(70);
+                }
+
+            }
+
+
+
+
+            std::string requestedColor = cardsPlaced[0].colors;  // Couleur demandée (première carte jouée)
+            bool atoutPlayed = false;  // Flag pour savoir si un atout est joué
+
+            // Vérifier s'il y a un atout dans le cardsPlaced
+            for (int i = 0; i < cardsPlaced.size(); ++i) {
+                if (cardsPlaced[i].colors == currentAtout) {
+                    atoutPlayed = true;
+                    break;
+                }
+            }
+
+            for (int i = 1; i < cardsPlaced.size(); ++i) {
+                if (atoutPlayed) {  // Si un atout a été joué
+                    if (cardsPlaced[i].colors == currentAtout && cardsPlaced[i].value > cardsPlaced[lastWinIndex].value) {
+                        lastWinIndex = i;
+                    }
+                } else {  // Si aucun atout n'a été joué, on suit la couleur demandée
+                    if (cardsPlaced[i].colors == requestedColor && cardsPlaced[i].value > cardsPlaced[lastWinIndex].value) {
+                        lastWinIndex = i;
+                    }
+                }
+            }
+
+
+            //animation de fin de pli
+            std::vector<int> endAnim;
+
+            if (lastWinIndex%2==0) endAnim={100,45};
+            else endAnim={145, 15};
+
+            std::vector<std::vector<int>> posCard1 = calculateTrajectory({34,15}, endAnim, 10);
+            std::vector<std::vector<int>> posCard2 = calculateTrajectory({48,15}, endAnim, 10);
+            std::vector<std::vector<int>> posCard3 = calculateTrajectory({62,15}, endAnim, 10);
+            std::vector<std::vector<int>> posCard4 = calculateTrajectory({76,15}, endAnim, 10);
+
+            std::vector<std::vector<std::vector<int>>> posCards = {posCard1, posCard2, posCard3, posCard4};
+
+            for (int i=0;i<posCard1.size();i++) {
                 u8g2.clearBuffer();
-                u8g2.drawStr(20, 20, "Carte placée:");
-                displayCard(cardsPlaced.back(), 20, 30);
+                for (size_t i_ = 0; i_ < cardsPlaced.size()-1; i_++) {
+                    displayCard(cardsPlaced[i_], posCards[i_][i][0], posCards[i_][i][1]);
+                }
+                
+                displayDeck(0, true);
+
                 u8g2.sendBuffer();
-                delay(500);
+
+                delay(100);
             }
-            // Montrer les scores du pli
+
+
+            // Montrer et enregistrer les scores du pli
+
             for (int i = 0; i < 4; i++) {
-                pliTeamsScores[i % 2] += cardsPlaced[i].value;
+                pliScores += cardsPlaced[i].value;
             }
-            splitTeamsScores[0] += pliTeamsScores[0];
-            splitTeamsScores[1] += pliTeamsScores[1];
+            splitTeamsScores[lastWinIndex % 2] += pliScores;
 
             u8g2.clearBuffer();
             u8g2.drawStr(20, 20, "Scores du pli:");
             char scoreBuffer[20];
-            sprintf(scoreBuffer, "Team 1: %d, Team 2: %d", pliTeamsScores[0], pliTeamsScores[1]);
+            if (lastWinIndex % 2==0) sprintf(scoreBuffer, "Vous avez gagné! ( %d ) points", pliScores);
+            else sprintf(scoreBuffer, "Les adversaires ont gagné! ( %d ) points", pliScores);
             u8g2.drawStr(20, 30, scoreBuffer);
             u8g2.sendBuffer();
             delay(1000);
