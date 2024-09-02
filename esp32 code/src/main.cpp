@@ -46,14 +46,28 @@ void updateIndexFocused(void * pvParameters) {
 }
 
 class Card {
-    public: std::string color;
+public:
+    std::string color;
     std::string name;
     int value;
 
-    Card(std::string c, std::string n, int v): color(c),
-    name(n),
-    value(v) {}
+    Card(std::string c, std::string n, int v) : color(c), name(n), value(v) {}
+
+    int getValue(std::string currentAtout) const {
+
+        if (currentAtout==color) {
+            if (name=="Valet"){
+                return 20;
+            }
+            if (name=="9"){
+                return 14;
+            }
+        }
+        return value;
+        
+    }
 };
+
 
 std::vector < Card > generateRandomGame() {
     std::vector < Card > jeu;
@@ -74,7 +88,7 @@ std::vector < Card > generateRandomGame() {
         },
         {
             "9",
-            14
+            0
         },
         {
             "10",
@@ -82,7 +96,7 @@ std::vector < Card > generateRandomGame() {
         },
         {
             "Valet",
-            20
+            2
         },
         {
             "Dame",
@@ -140,7 +154,7 @@ int evaluerCarte(Card carte,
         std::string couleurDemandee,
         std::string atout) {
 
-    int score = carte.value;
+    int score = carte.getValue(atout);
 
     // Bonus si la carte est de la color demandée
 
@@ -221,10 +235,10 @@ int choisirCarteAJouer(std::vector < Card > main, std::vector < Card > cardsPlac
     return evaluations[indexChoisi].second;
 }
 
-int evaluerCarteAppel(const Card & carteAppel,
-    const std::vector < Card > & main,
-        const std::string & atout) {
-    int score = carteAppel.value;
+int evaluerCarteAppel(Card carteAppel,
+    std::vector < Card > main,
+        std::string & atout) {
+    int score = carteAppel.getValue(carteAppel.name);
 
     // Bonus si la carte d'appel est un atout
     if (carteAppel.color == atout) {
@@ -241,7 +255,7 @@ int evaluerCarteAppel(const Card & carteAppel,
     int belotePossible = 0;
     for (const auto & carte: main) {
         if (carte.color == atout) {
-            score += 2 + carte.value; // Bonus pour avoir d'autres atouts
+            score += 2 + carte.getValue(carteAppel.name); // Bonus pour avoir d'autres atouts
         }
 
         if (carte.name == "Dame" || carte.name == "Roi") belotePossible++;
@@ -253,14 +267,14 @@ int evaluerCarteAppel(const Card & carteAppel,
 }
 
 // Fonction pour évaluer quelle color serait le meilleur atout au second tour
-std::string choisirMeilleurAtout(const std::vector < Card > main,
+std::string choisirMeilleurAtout(std::vector < Card > main,
     const std::string & couleurExclue) {
     std::map < std::string, int > scoresCouleurs;
 
     // Évaluer chaque color (sauf celle de la carte d'appel)
     for (const auto & carte: main) {
         if (carte.color != couleurExclue) {
-            scoresCouleurs[carte.color] += carte.value;
+            scoresCouleurs[carte.color] += carte.getValue(carte.name);
         }
     }
 
@@ -278,7 +292,7 @@ std::string choisirMeilleurAtout(const std::vector < Card > main,
 }
 
 // Fonction pour décider si le bot prend la carte d'appel au premier ou second tour
-std::string botPrendCarte(const Card & carteAppel, std::vector < Card > & main, int difficulte, bool premierTour) {
+std::string botPrendCarte(Card carteAppel, std::vector < Card > & main, int difficulte, bool premierTour) {
     if (premierTour) {
         // Évaluer la carte d'appel au premier tour
         int score = evaluerCarteAppel(carteAppel, main, carteAppel.color);
@@ -291,7 +305,7 @@ std::string botPrendCarte(const Card & carteAppel, std::vector < Card > & main, 
         int chance = rand() % 100;
 
         // Décision : prendre la carte si le score est suffisant ou si le hasard favorise la prise
-        return ((score > seuil) || (chance < difficulte * 10)) ? carteAppel.color : "no"; // Plus la difficulté est haute, plus on favorise la prise
+        return ((score > seuil) || (chance < 10-difficulte * 10)) ? carteAppel.color : "no"; // Plus la difficulté est haute, plus on favorise la prise
     } else {
         // Second tour : choisir un autre atout
         std::string meilleurAtout = choisirMeilleurAtout(main, carteAppel.color);
@@ -411,29 +425,40 @@ std::vector < std::vector < int >> calculateTrajectory(std::vector < int > start
     return trajectory;
 }
 
-void showSplitsScores(std::vector < std::vector < Card >> splitTeamCards, std::vector < int > splitTeamsScores, int currentAtoutIndex, int lastPlayerTaked,
+void showSplitsScores(std::vector < std::vector < Card >> splitTeamCards, std::vector < int > splitTeamsScores, std::string currentAtout, int currentAtoutIndex, int lastPlayerTaked,
     const char * event = NULL) {
 
-    u8g2.drawStr(0, 10, "Vous");
-    if (lastPlayerTaked % 2 == 0) u8g2.drawGlyph(25, 10, 0x2660 + currentAtoutIndex);
-    u8g2.setCursor(0, 20);
-    if (splitTeamCards[0].size() > 0) u8g2.print(splitTeamCards[0][0].value);
-    u8g2.setCursor(0, 30);
+    u8g2.drawStr(0, 12, "Vous");
+    u8g2.setFont(u8g2_font_9x15_t_symbols);
+    if (lastPlayerTaked % 2 == 0) u8g2.drawGlyph(50, 12, 0x2660 + currentAtoutIndex);
+    u8g2.setFont(u8g2_font_ncenB08_tr);
+    u8g2.setCursor(30, 12);
     u8g2.print(splitTeamsScores[0]);
 
-    u8g2.drawLine(40, 0, 40, 30);
+    if (splitTeamCards[0].size() > 0) {
+        u8g2.drawStr(105, 12,"+");
+        u8g2.setCursor(113, 12);
+        u8g2.print(splitTeamCards[0][0].getValue(currentAtout));
+    }
 
-    u8g2.drawStr(50, 10, "Eux");
-    if (lastPlayerTaked % 2 == 1) u8g2.drawGlyph(75, 10, 0x2660 + currentAtoutIndex);
-    u8g2.setCursor(50, 20);
-    if (splitTeamCards[1].size() > 0) u8g2.print(splitTeamCards[1][0].value);
-    u8g2.setCursor(50, 30);
+    u8g2.drawLine(0, 16, 128, 16);
+
+    u8g2.drawStr(0, 28, "Eux");
+    u8g2.setFont(u8g2_font_9x15_t_symbols);
+    if (lastPlayerTaked % 2 == 1) u8g2.drawGlyph(50, 28, 0x2660 + currentAtoutIndex);
+    u8g2.setFont(u8g2_font_ncenB08_tr);
+    u8g2.setCursor(30, 28);
     u8g2.print(splitTeamsScores[1]);
+    if (splitTeamCards[1].size() > 0) {
+        u8g2.drawStr(105, 28,"+");
+        u8g2.setCursor(113, 28);
+        u8g2.print(splitTeamCards[1][0].getValue(currentAtout));
+    }
 
     if (event != NULL) {
-        u8g2.drawBox(75, 11, u8g2.getStrWidth(event) + 4, 10);
+        u8g2.drawBox(85, 11, u8g2.getStrWidth(event) + 4, 10);
         u8g2.setDrawColor(0);
-        u8g2.drawStr(77, 20, event);
+        u8g2.drawStr(87, 20, event);
         u8g2.setDrawColor(1);
     }
 
@@ -453,11 +478,19 @@ void loop() {
     IndexFocused=5;
     while (touchRead(button1) > 35 || touchRead(button2) > 35) {
         u8g2.clearBuffer();
-        u8g2.drawStr(10, 10, "Difficulté des adversaires:");
-        char diffText[2];
-        if (IndexFocused % 12 == 0) IndexFocused++;
-        sprintf(diffText, "%d", IndexFocused % 10);
-        u8g2.drawStr(20, 20, diffText);
+        u8g2.drawStr(10, 10, "Difficulté des bots:");
+
+        if (IndexFocused <= 0) IndexFocused=1;
+        if (IndexFocused >= 10) IndexFocused=9;
+
+        u8g2.setCursor(20,24);
+        u8g2.print(IndexFocused);
+
+        u8g2.drawBox(42,16, 3, 8);
+        u8g2.drawBox(45,19, 37, 2);
+        u8g2.drawBox(42+IndexFocused*4,15, 3, 10);
+        u8g2.drawBox(82,16, 4, 8);
+
         u8g2.sendBuffer();
         delay(10);
     }
@@ -509,7 +542,7 @@ void loop() {
         std::string currentAtout = "";
         int lastPlayerTaked;
         int numberBeloteSaid = 0;
-        int beloteTeam;
+        int beloteTeam = 0;
         std::vector < Card > cardsGame;
         int dealtsCards;
 
@@ -770,8 +803,8 @@ void loop() {
         u8g2.drawStr(20, 20, "Tri des cartes...");
         u8g2.sendBuffer();
         delay(200);
-        std::sort(playersDecks[0].begin(), playersDecks[0].end(), [](Card a, Card b) {
-            return a.color < b.color || (a.color == b.color && a.value < b.value);
+        std::sort(playersDecks[0].begin(), playersDecks[0].end(),  [currentAtout](Card a, Card b) {
+            return a.color < b.color || (a.color == b.color && a.getValue(currentAtout) < b.getValue(currentAtout));
         });
 
         while (touchRead(button1) < 35 || touchRead(button2) < 35) {delay(5);}
@@ -781,6 +814,7 @@ void loop() {
             {}
         };
         int lastWinIndex = 0;
+        int reelLastWinIndex;
         for (int split = 1; split <= 8; split++) { // Chaque pli dans le round
             int pliScores = 0;
             std::vector < Card > cardsPlaced = {};
@@ -842,17 +876,25 @@ void loop() {
                                 timeClicked++;
                                 delay(1);
                             }
-                            if (timeClicked > 2000) { // si long click
-                                if (playersDecks[0][cardSelected].color == currentAtout && (playersDecks[0][cardSelected].name == "Roi" || playersDecks[0][cardSelected].name == "Dame")) {
-                                    if (numberBeloteSaid == 0 || beloteTeam == currentPlayer % 2) {
-                                        numberBeloteSaid++;
-                                        beloteTeam = currentPlayer % 2;
-                                    }
-                                } else {
-                                    continue;
-                                }
-                            }
+
                             if (cardIsPlacable(playersDecks[0][cardSelected], cardsPlaced, currentAtout, playersDecks[0])) {
+                                if (timeClicked > 2000) { // si long click
+                                    if (playersDecks[0][cardSelected].color == currentAtout && (playersDecks[0][cardSelected].name == "Roi" || playersDecks[0][cardSelected].name == "Dame")) {
+
+                                        Serial.println(numberBeloteSaid == 0 || beloteTeam == currentPlayer % 2);
+                                        if (numberBeloteSaid == 0 || beloteTeam == currentPlayer % 2) {
+                                            numberBeloteSaid++;
+                                            beloteTeam = currentPlayer % 2;
+                                            if (numberBeloteSaid == 1) u8g2.drawStr(20,20, "Belote!");
+                                            else u8g2.drawStr(20,20, "Rebelote!");
+                                            u8g2.sendBuffer();
+                                            delay(1000);
+                                        }
+                                    } else {
+                                        continue;
+                                    }
+                                }
+                                
                                 cardsPlaced.push_back(playersDecks[0][cardSelected]);
                                 playersDecks[0].erase(playersDecks[0].begin() + cardSelected);
                                 isPlayed = true;
@@ -899,11 +941,8 @@ void loop() {
                     
                     u8g2.drawGlyph(118, 12, 0x2660 + currentAtoutIndex);
 
-                    if (currentPlayer == 0) {
-                        displayDeck(0, false);
-                    } else {
-                        displayDeck(0, true);
-                    }
+                    displayDeck(0, false);
+                    
 
                     for (size_t i = 0; i < cardsPlaced.size() - 1; i++) {
                         displayCard(cardsPlaced[i], 34 + i * 14, 15);
@@ -925,23 +964,24 @@ void loop() {
                     break;
                 }
             }
-
-            for (int i = 1; i < cardsPlaced.size(); ++i) {
+            for (int i = 0; i < cardsPlaced.size(); ++i) {
                 if (atoutPlayed) { // Si un atout a été joué
-                    if (cardsPlaced[i].color == currentAtout && cardsPlaced[i].value > cardsPlaced[lastWinIndex].value) {
+                    if (cardsPlaced[i].color == currentAtout && cardsPlaced[i].getValue(currentAtout) > cardsPlaced[lastWinIndex].getValue(currentAtout)) {
                         lastWinIndex = i;
                     }
                 } else { // Si aucun atout n'a été joué, on suit la color demandée
-                    if (cardsPlaced[i].color == requestedColor && cardsPlaced[i].value > cardsPlaced[lastWinIndex].value) {
+                    if (cardsPlaced[i].color == requestedColor && cardsPlaced[i].getValue(currentAtout) > cardsPlaced[lastWinIndex].getValue(currentAtout)) {
                         lastWinIndex = i;
                     }
                 }
             }
 
+            reelLastWinIndex = (lastWinIndex - startPlayer) % 4;
+
             //animation de fin de pli
             std::vector < int > endAnim;
 
-            if (lastWinIndex % 2 == 0) endAnim = {
+            if (reelLastWinIndex % 2 == 0) endAnim = {
                 100,
                 45
             };
@@ -998,7 +1038,7 @@ void loop() {
             // Montrer et enregistrer les scores du pli
 
             for (int i = 0; i < 4; i++) {
-                splitTeamCards[lastWinIndex % 2].push_back(cardsPlaced[i]);
+                splitTeamCards[reelLastWinIndex % 2].push_back(cardsPlaced[i]);
             }
 
             u8g2.clearBuffer();
@@ -1013,112 +1053,129 @@ void loop() {
             0
         };
 
-        splitTeamsScores[lastWinIndex % 2] = 10; // dix de der
+        splitTeamsScores[reelLastWinIndex % 2] = 10; // dix de der
 
-        std::vector < Card > lastCardPlaced = {};
+        std::vector < Card > lastCardPlaced = {Card("no","no",0), Card("no","no",0)};
         while (splitTeamCards[0].size() > 0 || splitTeamCards[1].size() > 0) {
 
-            for (int i = 0; i < 20; i++) { //anim mooving cards
+            for (int i = 0; i < 30; i++) { //anim mooving cards
                 u8g2.clearBuffer();
 
-                if (splitTeamCards[0].size() > 0) {
-                    if (splitTeamCards[0].size() >= 2) displayCard(splitTeamCards[0][1], posPlayers[0][0], posPlayers[0][1]); //next card
-                    if (lastCardPlaced.size() > 0) displayCard(lastCardPlaced[0], posPlayers[0][0], posPlayers[0][1] - 19); //past card
 
-                    displayCard(splitTeamCards[0][0], posPlayers[0][0], posPlayers[0][1] - 1);
+                if (splitTeamCards[0].size() > 0) {
+                    
+                    if (splitTeamCards[0].size() >= 2) displayCard(splitTeamCards[0][1], 60, 12); //next card
+
+                    if (lastCardPlaced[0].color!="no") displayCard(lastCardPlaced[0], 89, 12); //past card
+
+                    displayCard(splitTeamCards[0][0], 60 + i, 12);
+
                 }
 
                 if (splitTeamCards[1].size() > 0) {
-                    if (splitTeamCards[1].size() >= 2) displayCard(splitTeamCards[1][1], posPlayers[3][0], posPlayers[3][1]); //next card
-                    if (lastCardPlaced.size() > 0) displayCard(lastCardPlaced[0], posPlayers[3][0] - 19, posPlayers[3][1]); //past card
+                    if (splitTeamCards[1].size() >= 2) displayCard(splitTeamCards[1][1], 60, 30); //next card
+                    if (lastCardPlaced[1].color!="no") displayCard(lastCardPlaced[1], 89, 30); //past card
 
-                    displayCard(splitTeamCards[0][0], posPlayers[3][0] - i, posPlayers[3][1]);
+                    displayCard(splitTeamCards[1][0], 60 + i, 30);
                 }
-                showSplitsScores(splitTeamCards, splitTeamsScores, currentAtoutIndex, lastPlayerTaked);
-                delay(15);
+
+                showSplitsScores(splitTeamCards, splitTeamsScores, currentAtout, currentAtoutIndex, lastPlayerTaked);
+
+                delay(20);
 
             }
 
             if (splitTeamCards[0].size() > 0) {
-                splitTeamsScores[0] += splitTeamCards[0][0].value;
+                splitTeamsScores[0] += splitTeamCards[0][0].getValue(currentAtout);
                 lastCardPlaced[0] = splitTeamCards[0][0];
                 splitTeamCards[0].erase(splitTeamCards[0].begin());
             }
+
             if (splitTeamCards[1].size() > 0) {
-                splitTeamsScores[1] += splitTeamCards[1][0].value;
+                splitTeamsScores[1] += splitTeamCards[1][0].getValue(currentAtout);
                 lastCardPlaced[1] = splitTeamCards[1][0];
                 splitTeamCards[1].erase(splitTeamCards[1].begin());
             }
+
         }
 
         if (numberBeloteSaid == 2) {
             for (int i = 1; i >= 20; ++i) {
                 splitTeamsScores[beloteTeam] += 1;
                 u8g2.clearBuffer();
-                showSplitsScores(splitTeamCards, splitTeamsScores, currentAtoutIndex, lastPlayerTaked, "+ belote");
-                delay(20 + i * 2);
+                showSplitsScores(splitTeamCards, splitTeamsScores, currentAtout, currentAtoutIndex, lastPlayerTaked, "+ belote");
+                delay(25 + i * 2);
             }
         }
+
+        bool litige = false;
 
         if (lastPlayerTaked % 2 == 0 && splitTeamsScores[0] <= splitTeamsScores[1] && splitTeamsScores[1] != 0) { //litige
             while (splitTeamsScores[1] < 162 || splitTeamsScores[0] > 0) {
                 if (splitTeamsScores[1] < 162) splitTeamsScores[1]++;
                 if (splitTeamsScores[0] > 0) splitTeamsScores[0]--;
                 u8g2.clearBuffer();
-                showSplitsScores(splitTeamCards, splitTeamsScores, currentAtoutIndex, lastPlayerTaked, "litige");
+                showSplitsScores(splitTeamCards, splitTeamsScores, currentAtout, currentAtoutIndex, lastPlayerTaked, "litige");
                 delay(100 - splitTeamsScores[0]);
             }
+            litige=true;
 
         } else if (lastPlayerTaked % 2 == 1 && splitTeamsScores[1] <= splitTeamsScores[0] && splitTeamsScores[0] != 0) { //litige
             while (splitTeamsScores[0] < 162 || splitTeamsScores[1] > 0) {
                 if (splitTeamsScores[0] < 162) splitTeamsScores[0]++;
                 if (splitTeamsScores[1] > 0) splitTeamsScores[1]--;
                 u8g2.clearBuffer();
-                showSplitsScores(splitTeamCards, splitTeamsScores, currentAtoutIndex, lastPlayerTaked, "litige");
+                showSplitsScores(splitTeamCards, splitTeamsScores, currentAtout, currentAtoutIndex, lastPlayerTaked, "litige");
                 delay(100 - splitTeamsScores[1]);
             }
+            litige=true;
+
 
         }
 
-        if (splitTeamsScores[0] == 0) { //capot
+
+        if (splitTeamsScores[0] == 0 && !litige) { //capot
             while (splitTeamsScores[1] < 252) {
                 splitTeamsScores[1]++;
                 u8g2.clearBuffer();
-                showSplitsScores(splitTeamCards, splitTeamsScores, currentAtoutIndex, lastPlayerTaked, "capot");
+                showSplitsScores(splitTeamCards, splitTeamsScores, currentAtout, currentAtoutIndex, lastPlayerTaked, "capot");
                 delay(100 - (int)(splitTeamsScores[1] / 4));
             }
         }
-        if (splitTeamsScores[1] == 0) { //capot
+        if (splitTeamsScores[1] == 0 && !litige) { //capot
             while (splitTeamsScores[0] < 252) {
                 splitTeamsScores[0]++;
                 u8g2.clearBuffer();
-                showSplitsScores(splitTeamCards, splitTeamsScores, currentAtoutIndex, lastPlayerTaked, "capot");
+                showSplitsScores(splitTeamCards, splitTeamsScores, currentAtout, currentAtoutIndex, lastPlayerTaked, "capot");
                 delay(100 - (int)(splitTeamsScores[0] / 4));
             }
         }
 
         u8g2.clearBuffer();
-        showSplitsScores(splitTeamCards, splitTeamsScores, currentAtoutIndex, lastPlayerTaked);
-        delay(300);
+        for (int i = 0; i < 5; ++i){
+            showSplitsScores(splitTeamCards, splitTeamsScores, currentAtout, currentAtoutIndex, lastPlayerTaked);
+            delay(300);
+        }
 
         totalTeamsScores[0].push_back(splitTeamsScores[0]);
         totalTeamsScores[1].push_back(splitTeamsScores[1]);
 
+        bool isFinished = false;
         if (roundsMax == 0) {
             // Demander si le joueur veut finir la partie
             u8g2.clearBuffer();
-            u8g2.drawStr(20, 20, "Finir la partie? (<- Non, -> Oui)");
+            u8g2.drawStr(0, 20, "Finir la partie? (<- Non, -> Oui)");
             u8g2.sendBuffer();
             while (true) {
                 if (touchRead(button1) < 35 && touchRead(button2) > 35) {
                     break;
                 } else if (touchRead(button2) < 35) {
-                    currentRound = roundsMax;
+                    isFinished = true;
                     break;
                 }
             }
         }
-        if (currentRound >= roundsMax && roundsMax > 0) { // Si tous les rounds sont joués
+        if ((currentRound >= roundsMax && roundsMax > 0) || isFinished) { // Si tous les rounds sont joués
             u8g2.clearBuffer();
             u8g2.drawStr(20, 20, "Fin de la partie");
             u8g2.sendBuffer();
@@ -1132,8 +1189,12 @@ void loop() {
     // Montrer les résultats et le vainqueur
 
     u8g2.clearBuffer();
-    u8g2.drawStr(20, 20, "Résultats finaux:");
-    u8g2.drawStr(20, 30, "Team 1: 0, Team 2: 0");
+    u8g2.drawStr(20, 10, "Résultats finaux:");
+    u8g2.drawStr(20, 20, "Team 1:");
+    u8g2.drawStr(20, 30, "0");
+    u8g2.drawStr(50, 20, "Team 2:");
+    u8g2.drawStr(50, 30, "0");
+
     u8g2.sendBuffer();
 
     std::vector < int > intTotalTeamsScores = {
@@ -1145,17 +1206,21 @@ void loop() {
         intTotalTeamsScores[1] += totalTeamsScores[1][i];
 
         u8g2.clearBuffer();
-        u8g2.drawStr(20, 20, "Résultats finaux:");
+        u8g2.drawStr(20, 10, "Résultats finaux:");
+        u8g2.drawStr(20, 20, "Team 1:");
+        u8g2.setCursor(20, 30);
+        u8g2.print(intTotalTeamsScores[0]);
+        u8g2.drawStr(50, 20, "Team 2:");
+        u8g2.setCursor(50, 30);
+        u8g2.print(intTotalTeamsScores[0]);
 
-        char finalScoreBuffer[20];
-        sprintf(finalScoreBuffer, "Team 1: %d, Team 2: %d", intTotalTeamsScores[0], intTotalTeamsScores[1]);
-        u8g2.drawStr(20, 30, finalScoreBuffer);
 
         u8g2.sendBuffer();
         delay(300 + i * 5);
     }
     delay(400);
-    u8g2.drawStr(20, 40, (intTotalTeamsScores[0] > intTotalTeamsScores[1]) ? "GG!" : "La loose!");
+    u8g2.clearBuffer();
+    u8g2.drawStr(20, 22, (intTotalTeamsScores[0] > intTotalTeamsScores[1]) ? "GG!" : "La loose!");
     u8g2.sendBuffer();
     while (touchRead(button1) < 35 || touchRead(button2) < 35) {delay(5);}
     while (touchRead(button1) > 35 && touchRead(button2) > 35) {delay(5);}
